@@ -1,0 +1,459 @@
+---
+title: "Writing custom rules"
+description: "Implement and distribute custom SQLFluff lint rules using the plugin API, including rule structure, crawlers, LintResult, LintFix, and testing."
+---
+
+Custom rules let you enforce SQL conventions that are specific to your organisation or project. You implement a rule as a Python class, package it as a plugin, and SQLFluff runs it alongside its built-in rules.
+
+<Note>
+  Before writing a custom rule, read [Plugin system](/reference/plugins) for how to structure and install a plugin package. This page focuses on writing the rule class itself.
+</Note>
+
+## Rule class structure
+
+Every custom rule is a subclass of `BaseRule`. The class name determines the rule code that appears in lint output.
+
+```python rules.py
+from sqlfluff.core.rules import BaseRule, LintResult, RuleContext
+from sqlfluff.core.rules.crawlers import SegmentSeekerCrawler
+
+
+class Rule_Example_L001(BaseRule):
+    """Short description used as the default lint message.
+
+    The class name must follow the pattern Rule_PluginName_LLNN
+    where LL is two uppercase letters and NN is two digits.
+    """
+
+    groups = ("all",)
+    crawl_behaviour = SegmentSeekerCrawler({"orderby_clause"})
+
+    def _eval(self, context: RuleContext):
+        """Evaluate this rule against the current segment."""
+        ...
+```
+
+The naming convention for plugin rules is `Rule_<PluginName>_<Code>` where `<Code>` is two uppercase letters followed by two digits (e.g. `L001`). SQLFluff's metaclass extracts the code automatically from the class name — you do not set `code` yourself.
+
+## Required attributes
+
+<AccordionGroup>
+  <Accordion title="groups">
+    A tuple of group names the rule belongs to. Always include `"all"` so the rule runs by default. You can add additional groups to allow users to enable or disable your rules collectively.
+
+    ```python
+    groups = ("all",)
+    ```
+  </Accordion>
+
+  <Accordion title="crawl_behaviour">
+    A crawler instance that controls which segments `_eval` is called on. The crawler traverses the parse tree and yields a `RuleContext` for each matching segment.
+
+    ```python
+    crawl_behaviour = SegmentSeekerCrawler({"orderby_clause"})
+    ```
+
+    See [SegmentSeekerCrawler usage](#segmentseekercrawler-usage) below for details.
+  </Accordion>
+
+  <Accordion title="config_keywords (optional)">
+    A list of config key names that your rule reads from `.sqlfluff`. When declared here, SQLFluff binds the config values to instance attributes with matching names before `_eval` runs.
+
+    ```python
+    config_keywords = ["forbidden_columns"]
+    ```
+
+    Declare corresponding defaults and validation metadata via `load_default_config` and `get_configs_info` in your plugin's `__init__.py`.
+  </Accordion>
+
+  <Accordion title="is_fix_compatible (optional)">
+    Set to `True` if `_eval` may return a `LintResult` that includes `LintFix` objects. This flag tells SQLFluff's CLI that fixes are available for this rule.
+
+    ```python
+    is_fix_compatible = True
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Implementing _eval
+
+`_eval` receives a `RuleContext` and returns either `None` (no violation), a `LintResult`, or a list of `LintResult` objects.
+
+```python
+def _eval(self, context: RuleContext):
+    """Return a LintResult if the rule is violated, or None."""
+    ...
+```
+
+### RuleContext fields
+
+`context` provides everything the rule needs to evaluate the current segment:
+
+| Field | Type | Description |
+|---|---|---|
+| `context.segment` | `BaseSegment` | The segment currently being evaluated |
+| `context.parent_stack` | `tuple[BaseSegment, ...]` | Ancestors from the root to this segment |
+| `context.raw_stack` | `tuple[RawSegment, ...]` | All raw segments seen so far in the file (only populated when the crawler requests it) |
+| `context.dialect` | `Dialect` | The active SQL dialect |
+| `context.config` | `FluffConfig` | The full SQLFluff configuration |
+| `context.fix` | `bool` | Whether SQLFluff is running in fix mode |
+| `context.memory` | `dict` | Arbitrary rule-level storage, persisted across calls within a file |
+| `context.segment_idx` | `int` | Index of this segment within its parent |
+
+### Return values
+
+- Return `None` — no violation found.
+- Return a `LintResult` — a violation was found.
+- Return a `list[LintResult]` — multiple violations were found on this segment.
+
+## LintResult
+
+`LintResult` represents a single lint violation.
+
+```python
+from sqlfluff.core.rules import LintResult
+
+LintResult(
+    anchor=seg,           # Segment to highlight in output
+    description="...",    # Optional override for the default message
+    fixes=[...],          # Optional list of LintFix objects
+)
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `anchor` | `BaseSegment` | The segment to point the user to. Defaults to the crawled segment if omitted. |
+| `description` | `str` | Overrides the rule's docstring summary in the lint output. |
+| `fixes` | `list[LintFix]` | Automated fixes to apply when running `sqlfluff fix`. |
+| `memory` | `dict` | Updated memory to pass to the next `_eval` call for this rule. |
+
+## LintFix
+
+`LintFix` describes a single automated edit to the parse tree. Use the class methods rather than the constructor directly.
+
+<Tabs>
+  <Tab title="delete">
+    Remove a segment entirely:
+
+    ```python
+    from sqlfluff.core.rules.fix import LintFix
+
+    LintFix.delete(anchor_segment)
+    ```
+  </Tab>
+  <Tab title="replace">
+    Replace a segment with one or more new segments:
+
+    ```python
+    LintFix.replace(
+        anchor_segment,
+        edit_segments=[new_segment],
+    )
+    ```
+  </Tab>
+  <Tab title="create_before">
+    Insert new segments immediately before the anchor:
+
+    ```python
+    LintFix.create_before(
+        anchor_segment,
+        edit_segments=[new_segment],
+    )
+    ```
+  </Tab>
+  <Tab title="create_after">
+    Insert new segments immediately after the anchor:
+
+    ```python
+    LintFix.create_after(
+        anchor_segment,
+        edit_segments=[new_segment],
+    )
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Segments are immutable. Never modify a segment in place. Always pass new segment instances to `LintFix` methods. The linter applies fixes by building a new tree from the original plus the recorded edits.
+</Warning>
+
+## SegmentSeekerCrawler usage
+
+`SegmentSeekerCrawler` is the standard crawler for most rules. It walks the parse tree and calls `_eval` only for segments whose type matches the given set — making rules efficient even on large files.
+
+```python
+from sqlfluff.core.rules.crawlers import SegmentSeekerCrawler
+
+# Trigger on any orderby_clause segment
+crawl_behaviour = SegmentSeekerCrawler({"orderby_clause"})
+
+# Trigger on multiple segment types
+crawl_behaviour = SegmentSeekerCrawler({"select_clause", "from_clause"})
+```
+
+To discover the correct segment type for your rule, use `sqlfluff parse` to inspect the parse tree of example SQL:
+
+```bash
+sqlfluff parse --dialect ansi my_file.sql
+```
+
+### Crawler options
+
+| Parameter | Default | Description |
+|---|---|---|
+| `types` | required | Set of segment type strings to match |
+| `provide_raw_stack` | `False` | Populate `context.raw_stack` with all raw segments seen so far. Costs extra memory; only enable when needed. |
+| `allow_recurse` | `True` | When `False`, once a segment matches, its children are not evaluated. Useful when the rule inspects children itself. |
+
+Other built-in crawlers:
+
+- `RootOnlyCrawler` — calls `_eval` once on the root segment of the file.
+- `ParentOfSegmentCrawler` — calls `_eval` on the parent of any segment whose type matches the set.
+
+## Complete example from sqlfluff-plugin-example
+
+The following is the complete source of the example rule shipped with SQLFluff. It forbids `ORDER BY` on a configurable list of columns.
+
+<CodeGroup>
+
+```python src/sqlfluff_plugin_example/rules.py
+"""An example of a custom rule implemented through the plugin system."""
+
+from sqlfluff.core.rules import (
+    BaseRule,
+    LintResult,
+    RuleContext,
+)
+from sqlfluff.core.rules.crawlers import SegmentSeekerCrawler
+
+
+class Rule_Example_L001(BaseRule):
+    """ORDER BY on these columns is forbidden!
+
+    **Anti-pattern**
+
+    Using ``ORDER BY`` on some forbidden columns.
+
+    .. code-block:: sql
+
+        SELECT *
+        FROM foo
+        ORDER BY
+            bar,
+            baz
+
+    **Best practice**
+
+    Do not order by these columns.
+
+    .. code-block:: sql
+
+        SELECT *
+        FROM foo
+        ORDER BY bar
+    """
+
+    groups = ("all",)
+    config_keywords = ["forbidden_columns"]
+    crawl_behaviour = SegmentSeekerCrawler({"orderby_clause"})
+    is_fix_compatible = True
+
+    def __init__(self, *args, **kwargs):
+        """Overwrite __init__ to set config."""
+        super().__init__(*args, **kwargs)
+        self.forbidden_columns = [
+            col.strip() for col in self.forbidden_columns.split(",")
+        ]
+
+    def _eval(self, context: RuleContext):
+        """We should not ORDER BY forbidden_columns."""
+        for seg in context.segment.segments:
+            col_name = seg.raw.lower()
+            if col_name in self.forbidden_columns:
+                return LintResult(
+                    anchor=seg,
+                    description=f"Column `{col_name}` not allowed in ORDER BY.",
+                )
+```
+
+```python src/sqlfluff_plugin_example/__init__.py
+"""Plugin entry point for the example plugin."""
+
+from typing import Any
+
+from sqlfluff.core.config import load_config_resource
+from sqlfluff.core.plugin import hookimpl
+from sqlfluff.core.rules import BaseRule, ConfigInfo
+
+
+@hookimpl
+def get_rules() -> list[type[BaseRule]]:
+    """Get plugin rules."""
+    from sqlfluff_plugin_example.rules import Rule_Example_L001
+
+    return [Rule_Example_L001]
+
+
+@hookimpl
+def load_default_config() -> dict[str, Any]:
+    """Loads the default configuration for the plugin."""
+    return load_config_resource(
+        package="sqlfluff_plugin_example",
+        file_name="plugin_default_config.cfg",
+    )
+
+
+@hookimpl
+def get_configs_info() -> dict[str, dict[str, ConfigInfo]]:
+    """Get rule config validations and descriptions."""
+    return {
+        "forbidden_columns": {"definition": "A list of columns to forbid"},
+    }
+```
+
+```ini src/sqlfluff_plugin_example/plugin_default_config.cfg
+[sqlfluff:rules:Example_L001]
+forbidden_columns = bar, baaz
+```
+
+</CodeGroup>
+
+Key design points in this example:
+
+- `config_keywords = ["forbidden_columns"]` causes SQLFluff to bind the `forbidden_columns` config value as `self.forbidden_columns` before `_eval` is called.
+- `__init__` converts the comma-separated string into a list immediately on construction.
+- `_eval` iterates over child segments of the `orderby_clause` and returns a `LintResult` with a custom `description` that includes the offending column name.
+- The rule does not return a fix despite `is_fix_compatible = True` — you could add `LintFix.delete(seg)` to the result to implement auto-fixing.
+
+## Testing custom rules
+
+SQLFluff provides `RuleTestCase` and `load_test_cases` for YAML-driven rule testing. Write test cases in YAML and a single pytest function runs them all.
+
+### YAML test case format
+
+```yaml test/rules/test_cases/Rule_Example_L001.yml
+rule: Example_L001
+
+no_forbidden_col_used:
+  pass_str: |
+    select
+      a,
+      sum(b)
+    from tbl
+    group by a
+    order by a
+
+no_order_by_used:
+  pass_str: |
+    select
+      a,
+      b,
+      c
+    from tbl
+
+forbidden_col_used:
+  fail_str: |
+    select
+      bar,
+      baz
+    from tbl
+    order by bar
+```
+
+- `rule` — the rule code to test (without the plugin name prefix in the YAML, but matching the `code` attribute on the class).
+- `pass_str` — SQL that should produce no violation.
+- `fail_str` — SQL that should produce a violation.
+- You can also specify `fix_str` to assert what `sqlfluff fix` produces, and `configs` to override configuration for an individual test case.
+
+### pytest runner
+
+```python test/rules/rule_test_cases_test.py
+"""Runs the rule test cases."""
+
+import os
+
+import pytest
+
+from sqlfluff.utils.testing.rules import (
+    RuleTestCase,
+    load_test_cases,
+)
+
+ids, test_cases = load_test_cases(
+    test_cases_path=os.path.join(
+        os.path.abspath(os.path.dirname(__file__)), "test_cases", "*.yml"
+    )
+)
+
+
+@pytest.mark.parametrize("test_case", test_cases, ids=ids)
+def test__rule_test_case(test_case: RuleTestCase):
+    """Evaluate the parameterised YAML test cases."""
+    test_case.evaluate()
+```
+
+Run the tests from your plugin directory:
+
+```bash
+pytest test/
+```
+
+<Tip>
+  Look at the test fixture files for SQLFluff's bundled rules in `test/fixtures/rules/std_rule_cases/` for examples of the full range of test case options, including multi-dialect tests and fix assertions.
+</Tip>
+
+## Registering the rule via entry point
+
+A rule class is only visible to SQLFluff if it is returned by a `get_rules` hook in an installed plugin. The complete registration path is:
+
+<Steps>
+  <Step title="Declare the entry point in pyproject.toml">
+    ```toml pyproject.toml
+    [project.entry-points.sqlfluff]
+    sqlfluff_example = "sqlfluff_plugin_example"
+    ```
+  </Step>
+
+  <Step title="Implement get_rules in __init__.py">
+    ```python __init__.py
+    from sqlfluff.core.plugin import hookimpl
+    from sqlfluff.core.rules import BaseRule
+
+
+    @hookimpl
+    def get_rules() -> list[type[BaseRule]]:
+        from sqlfluff_plugin_example.rules import Rule_Example_L001
+
+        return [Rule_Example_L001]
+    ```
+  </Step>
+
+  <Step title="Install the plugin">
+    ```bash
+    pip install -e /path/to/your/plugin
+    ```
+  </Step>
+
+  <Step title="Verify the rule is visible">
+    ```bash
+    sqlfluff rules
+    ```
+
+    Your rule should appear in the output with its code, name, and description.
+  </Step>
+</Steps>
+
+## Rule naming reference
+
+The rule class name encodes the rule code:
+
+| Class name | Rule code | Notes |
+|---|---|---|
+| `Rule_Example_L001` | `Example_L001` | Plugin rule — `Example` is the plugin name |
+| `Rule_AL01` | `AL01` | Core rule — no plugin name prefix |
+
+SQLFluff's metaclass validates the class name against the pattern `Rule_?([A-Z][a-zA-Z]+)?_([A-Z0-9]{4})` and raises a `SQLFluffUserError` if the name does not match.
+
+<Note>
+  The rule `code` and `description` attributes are populated automatically by the metaclass from the class name and docstring respectively. You do not assign them manually.
+</Note>

@@ -1,0 +1,433 @@
+---
+title: "Convention Rules (CV)"
+description: "Rules CV01–CV12 enforce SQL coding conventions around operators, functions, structure, and style."
+---
+
+Convention rules enforce broadly agreed SQL coding conventions: consistent operator syntax, preferred functions, semicolon placement, null comparisons, type casting style, and more.
+
+---
+
+## CV01 — `convention.not_equal`
+
+**Consistent usage of `!=` or `<>` for "not equal to".**
+
+Enforces that all "not equal to" comparisons use the same operator throughout the file. Mixing `!=` and `<>` in the same file is flagged.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT * FROM x WHERE 1 <> 2 AND 3 != 4;
+    ```
+
+    Both `<>` and `!=` are used in the same query.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    -- Using c_style (!=) consistently:
+    SELECT * FROM x WHERE 1 != 2 AND 3 != 4;
+
+    -- Or using ansi (<>) consistently:
+    SELECT * FROM x WHERE 1 <> 2 AND 3 <> 4;
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:CV01]
+# Options: "consistent" (default), "c_style" (!=), or "ansi" (<>)
+preferred_not_equal_style = consistent
+```
+
+<Note>
+CV01 is disabled for the Teradata dialect, which does not support `!=`.
+</Note>
+
+---
+
+## CV02 — `convention.coalesce`
+
+**Use `COALESCE` instead of `IFNULL` or `NVL`.**
+
+`COALESCE` is universally supported across SQL dialects. `IFNULL` is not supported in Redshift, and `NVL` is not supported in BigQuery. Additionally, `COALESCE` accepts an arbitrary number of arguments.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT ifnull(foo, 0) AS bar
+    FROM baz;
+
+    SELECT nvl(foo, 0) AS bar
+    FROM baz;
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT coalesce(foo, 0) AS bar
+    FROM baz;
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## CV03 — `convention.select_trailing_comma`
+
+**Trailing commas within SELECT clause.**
+
+Controls whether trailing commas after the last item in a `SELECT` clause are forbidden (default) or required. Many database backends treat trailing commas as a syntax error. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern (forbid mode, default)">
+    ```sql
+    SELECT
+        a,
+        b,
+    FROM foo
+    ```
+
+    The trailing comma after `b` is forbidden.
+  </Tab>
+  <Tab title="Best practice (forbid mode)">
+    ```sql
+    SELECT
+        a,
+        b
+    FROM foo
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:CV03]
+# Options: "forbid" (default) or "require"
+select_clause_trailing_comma = forbid
+```
+
+---
+
+## CV04 — `convention.count_rows`
+
+**Use consistent syntax to express "count number of rows".**
+
+`COUNT(*)`, `COUNT(1)`, and `COUNT(0)` are equivalent in most SQL engines. By default, SQLFluff enforces `COUNT(*)` as per the ANSI-92 spec. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        count(1)
+    FROM table_a
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        count(*)
+    FROM table_a
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:CV04]
+# Prefer COUNT(1) instead of COUNT(*)
+prefer_count_1 = false
+# Prefer COUNT(0) instead of COUNT(*)
+prefer_count_0 = false
+```
+
+<Note>
+If both `prefer_count_1` and `prefer_count_0` are set to true, `prefer_count_1` takes precedence.
+</Note>
+
+---
+
+## CV05 — `convention.is_null`
+
+**Comparisons with NULL should use `IS` or `IS NOT`.**
+
+Using `=`, `!=`, or `<>` to compare a value against `NULL` always evaluates to `NULL` (unknown), not `TRUE` or `FALSE`. Use `IS NULL` or `IS NOT NULL` instead. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        a
+    FROM foo
+    WHERE a = NULL
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        a
+    FROM foo
+    WHERE a IS NULL
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## CV06 — `convention.terminator`
+
+**Statements must end with a semi-colon.**
+
+Ensures that every SQL statement is terminated with a semicolon, and that the semicolon is immediately adjacent to the end of the statement (not on a separate line or preceded by extra whitespace).
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        a
+    FROM foo
+
+    ;
+
+    SELECT
+        b
+    FROM bar  ;
+    ```
+
+    Semicolon on a separate line, or preceded by trailing whitespace.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        a
+    FROM foo;
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:CV06]
+# When true, place the semicolon on a new line for multi-line statements
+multiline_newline = false
+# When true, enforce that the final statement in a file ends with a semicolon
+require_final_semicolon = false
+```
+
+---
+
+## CV07 — `convention.statement_brackets`
+
+**Top-level statements should not be wrapped in brackets.**
+
+Wrapping a top-level `SELECT` in brackets is unnecessary and can confuse readers.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    (SELECT
+        foo
+    FROM bar)
+
+    -- Also applies when the statement contains a subquery:
+    (SELECT
+        foo
+    FROM (SELECT * FROM bar))
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        foo
+    FROM bar
+
+    SELECT
+        foo
+    FROM (SELECT * FROM bar)
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## CV08 — `convention.left_join`
+
+**Use `LEFT JOIN` instead of `RIGHT JOIN`.**
+
+`RIGHT JOIN` can always be rewritten as a `LEFT JOIN` by swapping the table order. Preferring `LEFT JOIN` consistently makes query logic easier to follow.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        foo.col1,
+        bar.col2
+    FROM foo
+    RIGHT JOIN bar
+        ON foo.bar_id = bar.id;
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        foo.col1,
+        bar.col2
+    FROM bar
+    LEFT JOIN foo
+        ON foo.bar_id = bar.id;
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## CV09 — `convention.blocked_words`
+
+**Block a configurable list of words from being used.**
+
+A general-purpose rule that flags any use of words or patterns from a configurable deny list. Useful for preventing use of deprecated objects, non-portable functions, or team-specific banned terms. Case-insensitive.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    -- With blocked_words = deprecated_table,bool
+    SELECT * FROM deprecated_table WHERE 1 = 1;
+    CREATE TABLE myschema.t1 (a BOOL);
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT * FROM another_table WHERE 1 = 1;
+    CREATE TABLE myschema.t1 (a BOOLEAN);
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:CV09]
+# Comma-separated list of blocked words (case-insensitive)
+blocked_words = deprecated_table,bool
+# Optional regex pattern to block (in addition to blocked_words)
+blocked_regex =
+# When true, also match against the source string in templated SQL
+match_source = false
+```
+
+---
+
+## CV10 — `convention.quoted_literals`
+
+**Consistent usage of preferred quotes for quoted literals.**
+
+Enforces a consistent quoting style (`'single'` or `"double"`) for string literals. Falls back to alternate quotes only when needed to reduce the number of escape characters. This rule is enabled only for dialects that support both quoting styles: `bigquery`, `databricks`, `hive`, `mysql`, `sparksql`.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        "abc",
+        'abc',
+        "abc" = 'abc'
+    FROM foo
+    ```
+
+    A mix of single and double quotes for string literals.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    -- With preferred_quoted_literal_style = double_quotes:
+    SELECT
+        "abc",
+        "abc",
+        "abc" = "abc"
+    FROM foo
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:CV10]
+# Options: "consistent" (default), "single_quotes", or "double_quotes"
+preferred_quoted_literal_style = consistent
+# Set to true to enable for dialects not in the default list
+force_enable = false
+```
+
+---
+
+## CV11 — `convention.casting_style`
+
+**Enforce consistent type casting style.**
+
+Flags mixing of `CAST(x AS type)`, `CONVERT(type, x)`, and the shorthand `x::type` operator within the same file.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        CONVERT(int, 1) AS bar,
+        100::int::text,
+        CAST(10 AS text) AS coo
+    FROM foo;
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    -- Using CAST consistently:
+    SELECT
+        CAST(1 AS int) AS bar,
+        CAST(CAST(100 AS int) AS text),
+        CAST(10 AS text) AS coo
+    FROM foo;
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:CV11]
+# Options: "consistent" (default), "cast", "convert", or "shorthand"
+preferred_type_casting_style = consistent
+```
+
+<Note>
+CV11 is disabled for Teradata, Athena, and Trino dialects, which have restrictions on which casting styles they support. The rule cannot rewrite `CONVERT` with more than 2 arguments (e.g. T-SQL's 3-argument form) into `CAST`.
+</Note>
+
+---
+
+## CV12 — `convention.join_condition`
+
+**Use `JOIN ... ON ...` instead of `WHERE ...` for join conditions.**
+
+When a `JOIN` is present without an `ON` clause and the join condition appears in the `WHERE` clause, this rule flags the query and can move the applicable conditions from `WHERE` to `ON`.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        foo.a,
+        bar.b
+    FROM foo
+    JOIN bar
+    WHERE foo.x = bar.y;
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        foo.a,
+        bar.b
+    FROM foo
+    JOIN bar
+        ON foo.x = bar.y;
+    ```
+  </Tab>
+</Tabs>

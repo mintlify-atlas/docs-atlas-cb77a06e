@@ -1,0 +1,297 @@
+---
+title: "Advanced API"
+description: "Use FluffConfig and Linter directly for full control over SQLFluff behaviour."
+---
+
+The advanced API gives you direct access to the `Linter` and `FluffConfig` classes from `sqlfluff.core`. Use it when you need control beyond what the simple API provides — such as traversing parse trees, reusing configuration across many calls, or integrating deeply with SQLFluff internals.
+
+<Warning>
+The advanced API is experimental. Internal class interfaces in `sqlfluff.core` may change without notice between releases. If you build on these classes, open an issue on GitHub to help shape a stable public API.
+</Warning>
+
+---
+
+## FluffConfig
+
+`FluffConfig` holds all configuration for a SQLFluff session. Pass it to `Linter` or to the simple API functions.
+
+```python
+from sqlfluff.core import FluffConfig
+```
+
+### Construction methods
+
+`FluffConfig` provides several class methods for construction:
+
+<AccordionGroup>
+  <Accordion title="FluffConfig() — from a dictionary">
+    Pass a nested dict mirroring the `.sqlfluff` INI structure.
+
+    ```python
+    config = FluffConfig(configs={"core": {"dialect": "bigquery"}})
+    ```
+  </Accordion>
+
+  <Accordion title="FluffConfig(overrides=...) — keyword overrides">
+    Pass a flat dict of override values directly.
+
+    ```python
+    from sqlfluff.core import FluffConfig, Linter
+
+    config = FluffConfig(
+        overrides={
+            "dialect": "snowflake",
+            # Use the string "none" to explicitly clear a config value
+            "library_path": "none",
+        }
+    )
+    linted = Linter(config=config).lint_string("SELECT 1\n")
+    assert linted.get_violations() == []
+    ```
+  </Accordion>
+
+  <Accordion title="FluffConfig.from_string() — from INI text">
+    Parse configuration from an INI-formatted string.
+
+    ```python
+    config = FluffConfig.from_string("[sqlfluff]\ndialect=bigquery\n")
+    ```
+  </Accordion>
+
+  <Accordion title="FluffConfig.from_strings() — layered INI strings">
+    Simulate nested config files. Later strings take precedence.
+
+    ```python
+    config = FluffConfig.from_strings(
+        "[sqlfluff]\ndialect=bigquery\n",
+        "[sqlfluff]\ndialect=mysql\n",
+    )
+    # Resulting dialect is "mysql"
+    ```
+  </Accordion>
+
+  <Accordion title="FluffConfig.from_path() — from a directory">
+    Load configuration from a `.sqlfluff` file found in the given directory.
+
+    ```python
+    config = FluffConfig.from_path("path/to/project/")
+    ```
+  </Accordion>
+
+  <Accordion title="FluffConfig.from_kwargs() — convenience helper">
+    Construct from named keyword arguments for common settings.
+
+    ```python
+    config = FluffConfig.from_kwargs(dialect="bigquery", rules=["LT01"])
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Linter
+
+`Linter` is the main workhorse class. Instantiate it with a `FluffConfig`, then call its methods to lint, fix, or parse SQL.
+
+```python
+from sqlfluff.core import FluffConfig, Linter
+```
+
+### Linting strings
+
+```python
+from sqlfluff.core import FluffConfig, Linter
+
+config = FluffConfig.from_kwargs(dialect="bigquery", rules=["LT01"])
+linter = Linter(config=config)
+
+# lint_string returns a LintedFile object
+linted = linter.lint_string("SELECT  1", fix=True)
+
+# Access violations
+violations = linted.get_violations()
+
+# Get the fixed SQL string
+# Returns a tuple: (fixed_sql, success_flag)
+fixed_sql, did_fix = linted.fix_string()
+assert fixed_sql == ("SELECT 1", True)
+```
+
+### Parsing strings
+
+Use `parse_string()` to get direct access to the parse tree:
+
+```python
+from sqlfluff.core import Linter
+
+sql = """
+SELECT 1;
+CREATE TABLE tbl (a int, b varchar);
+SELECT 100;
+INSERT INTO tbl VALUES (1, 'abc');
+SELECT 10000;
+"""
+
+linter = Linter(dialect="ansi")
+parsed = linter.parse_string(sql)
+
+# Access the root of the parse tree
+tree = parsed.tree
+
+# The root is a "file" segment
+assert tree.is_type("file")
+
+# Inspect direct children
+sections = [(segment.get_type(), segment.raw) for segment in tree.segments]
+
+# Recursively find all SELECT statements
+select_statements = tree.recursive_crawl("select_statement")
+selects = [(seg.get_type(), seg.raw) for seg in select_statements]
+
+# Build a filtered script from only the SELECTs
+filtered_script = ";\n".join(sel[1] for sel in selects)
+```
+
+### Traversing the parse tree
+
+The parse tree is composed of `BaseSegment` objects. Key methods:
+
+<AccordionGroup>
+  <Accordion title=".is_type(*types)">
+    Check if a segment is one of the given types.
+
+    ```python
+    tree.is_type("file")  # True
+    segment.is_type("select_statement", "insert_statement")
+    ```
+  </Accordion>
+
+  <Accordion title=".get_type()">
+    Return the segment's type as a string.
+
+    ```python
+    segment.get_type()  # e.g. "select_statement"
+    ```
+  </Accordion>
+
+  <Accordion title=".recursive_crawl(*types)">
+    Return all descendant segments of the given types.
+
+    ```python
+    # Find all SELECT statements anywhere in the tree
+    selects = tree.recursive_crawl("select_statement")
+
+    # Limit search depth for performance
+    selects = tree.recursive_crawl(
+        "select_statement",
+        no_recursive_seg_type="bracketed",
+    )
+    ```
+  </Accordion>
+
+  <Accordion title=".segments">
+    Direct children of this segment.
+
+    ```python
+    for child in tree.segments:
+        print(child.get_type(), child.raw)
+    ```
+  </Accordion>
+
+  <Accordion title=".raw">
+    The raw SQL text represented by this segment.
+
+    ```python
+    segment.raw  # e.g. "SELECT 1"
+    ```
+  </Accordion>
+
+  <Accordion title=".stringify()">
+    A human-readable string representation of the segment tree, useful for debugging.
+
+    ```python
+    print(parsed.tree.stringify())
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Config overrides programmatically
+
+Override any SQLFluff configuration value at runtime by passing `overrides` to `FluffConfig`:
+
+```python
+from sqlfluff.core import FluffConfig, Linter
+
+config = FluffConfig(
+    overrides={
+        "dialect": "snowflake",
+        "rules": "LT01,LT02",        # comma-separated rule list
+        "max_line_length": "120",
+        # Suppress library_path lookup by setting to "none"
+        "library_path": "none",
+    }
+)
+
+linter = Linter(config=config)
+result = linter.lint_string("SELECT 1\n")
+violations = result.get_violations()
+```
+
+<Tip>
+When setting overrides that would normally be `None` in configuration, pass the string `"none"` (lowercase) rather than a Python `None` literal. This ensures the override is respected over any config files present in the path.
+</Tip>
+
+---
+
+## Complete example: filter SQL by statement type
+
+The following example parses a multi-statement SQL script and extracts only the `SELECT` statements:
+
+```python
+from sqlfluff.core import Linter
+
+sql = """
+SELECT 1;
+CREATE TABLE tbl (a int, b varchar);
+SELECT 100;
+INSERT INTO tbl VALUES (1, 'abc');
+SELECT 10000;
+"""
+
+linter = Linter(dialect="ansi")
+parsed = linter.parse_string(sql)
+tree = parsed.tree
+
+# The root is always a "file" segment
+assert tree.is_type("file")
+
+# Recursively find all SELECT statements
+select_statements = tree.recursive_crawl("select_statement")
+selects = [(seg.get_type(), seg.raw) for seg in select_statements]
+# [
+#   ("select_statement", "SELECT 1"),
+#   ("select_statement", "SELECT 100"),
+#   ("select_statement", "SELECT 10000"),
+# ]
+
+# Reconstruct a SQL script from only the SELECTs
+filtered_script = ";\n".join(sel[1] for sel in selects)
+# "SELECT 1;\nSELECT 100;\nSELECT 10000"
+print(filtered_script)
+```
+
+---
+
+## Listing available rules and dialects
+
+```python
+from sqlfluff.api import list_rules, list_dialects
+
+# Returns a list of available rules
+rules = list_rules()
+
+# Returns a list of available dialects
+dialects = list_dialects()
+```

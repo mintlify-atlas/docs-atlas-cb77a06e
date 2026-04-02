@@ -1,0 +1,263 @@
+---
+title: "CLI overview"
+description: "Complete reference for the SQLFluff command-line interface, including global options, all commands, and shell completion setup."
+---
+
+SQLFluff is invoked from the command line as `sqlfluff`. It provides commands for linting, fixing, parsing, and formatting SQL files, along with utility commands for inspecting your configuration.
+
+```bash
+sqlfluff [OPTIONS] COMMAND [ARGS]...
+```
+
+## Commands
+
+<CardGroup cols={2}>
+  <Card title="lint" icon="magnifying-glass" href="/reference/lint">
+    Check SQL files for rule violations and report them without modifying files.
+  </Card>
+  <Card title="fix" icon="wrench" href="/reference/fix">
+    Automatically apply fixes for all fixable violations in SQL files.
+  </Card>
+  <Card title="parse" icon="sitemap" href="/reference/parse">
+    Parse SQL and output the parse tree. Useful for debugging grammar issues.
+  </Card>
+  <Card title="format" icon="align-left" href="/reference/format">
+    Apply a curated subset of formatting rules to produce consistently styled SQL.
+  </Card>
+</CardGroup>
+
+### Utility commands
+
+| Command | Description |
+|---|---|
+| `sqlfluff version` | Print the installed SQLFluff version. |
+| `sqlfluff rules` | List all available rules with short descriptions. |
+| `sqlfluff dialects` | List all available SQL dialects. |
+| `sqlfluff render PATH` | Render a templated SQL file and print the output without linting. |
+
+## Global options
+
+These options are available on the top-level `sqlfluff` command. Many of them are also available on individual subcommands — see each command's reference page for its full option list.
+
+<AccordionGroup>
+  <Accordion title="--version">
+    Print the installed SQLFluff version and exit.
+
+    ```bash
+    sqlfluff --version
+    ```
+  </Accordion>
+
+  <Accordion title="-h, --help">
+    Show a help message and exit. Available on both the top-level command and each subcommand.
+
+    ```bash
+    sqlfluff --help
+    sqlfluff lint --help
+    ```
+  </Accordion>
+
+  <Accordion title="-d, --dialect TEXT">
+    The SQL dialect to use when parsing. Overrides the `dialect` setting in your `.sqlfluff` config file.
+
+    ```bash
+    sqlfluff lint --dialect postgres my_query.sql
+    ```
+
+    Run `sqlfluff dialects` to see all available dialect names.
+  </Accordion>
+
+  <Accordion title="--config PATH">
+    Path to an additional `.sqlfluff` config file to load on top of the standard config discovery chain. The file must be in INI/CFG format.
+
+    ```bash
+    sqlfluff lint --config /path/to/my.sqlfluff query.sql
+    ```
+  </Accordion>
+
+  <Accordion title="--ignore-local-config">
+    Skip config files found during the normal directory-tree search. Use this to lint with only the defaults, or in combination with `--config` to use a single explicit config file.
+
+    ```bash
+    sqlfluff lint --ignore-local-config --config ci.sqlfluff .
+    ```
+  </Accordion>
+
+  <Accordion title="-r, --rules TEXT">
+    Limit linting to a specific set of rules. Pass a comma-separated list of rule codes or group names.
+
+    ```bash
+    sqlfluff lint --rules LT01,LT02 query.sql
+    sqlfluff lint --rules layout query.sql
+    ```
+  </Accordion>
+
+  <Accordion title="-e, --exclude-rules TEXT">
+    Exclude specific rules from the set of rules being applied. Pass a comma-separated list of rule codes or group names.
+
+    ```bash
+    sqlfluff lint --exclude-rules LT01 query.sql
+    ```
+  </Accordion>
+
+  <Accordion title="--disable-noqa">
+    Ignore all inline `-- noqa` comments. Violations suppressed by `noqa` are reported as if the comment were absent.
+
+    ```bash
+    sqlfluff lint --disable-noqa query.sql
+    ```
+  </Accordion>
+
+  <Accordion title="--disable-noqa-except TEXT">
+    Ignore all inline `-- noqa` comments except for the listed rule codes. Accepts a comma-separated list.
+
+    ```bash
+    sqlfluff lint --disable-noqa-except LT01 query.sql
+    ```
+  </Accordion>
+
+  <Accordion title="-p, --processes INTEGER">
+    Number of parallel worker processes to use. Positive integers set an explicit count. `0` uses all available CPUs. Negative integers subtract from the available CPU count (e.g. `-1` means all CPUs minus one).
+
+    ```bash
+    sqlfluff lint --processes 4 .
+    sqlfluff lint --processes 0 .
+    ```
+  </Accordion>
+
+  <Accordion title="--encoding TEXT">
+    File encoding to use when reading and writing SQL files. Defaults to autodetection.
+
+    ```bash
+    sqlfluff lint --encoding utf-8 query.sql
+    ```
+  </Accordion>
+
+  <Accordion title="-i, --ignore TEXT">
+    Suppress entire error families so they do not affect the exit code. Accepts a comma-separated list of families such as `parsing` and `templating`.
+
+    ```bash
+    sqlfluff lint --ignore parsing query.sql
+    sqlfluff lint --ignore parsing,templating .
+    ```
+
+    <Warning>
+      `--ignore` prevents the error from influencing the exit code and output, but it does not suppress `noqa` behaviour. For suppressing specific rules on specific lines, use inline `-- noqa` comments instead.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="-v, --verbose">
+    Increase output verbosity. Stackable: `-v` adds some detail, `-vv` adds more, and `-vvvv` or `-vvvvv` gives maximum detail including parser-level debug output.
+
+    ```bash
+    sqlfluff lint -v query.sql
+    sqlfluff lint -vvvv query.sql
+    ```
+  </Accordion>
+
+  <Accordion title="-n, --nocolor">
+    Disable ANSI colour codes in the output.
+
+    ```bash
+    sqlfluff lint --nocolor query.sql
+    ```
+  </Accordion>
+
+  <Accordion title="-t, --templater TEXT">
+    Override the templater used to pre-process SQL before parsing. Defaults to `jinja`. Other options depend on installed plugins (e.g. `dbt`).
+
+    ```bash
+    sqlfluff lint --templater raw query.sql
+    ```
+  </Accordion>
+
+  <Accordion title="--library-path TEXT">
+    Override the `library_path` setting from your `[sqlfluff:templater:jinja]` config section. Set to `none` to disable Jinja library loading entirely.
+
+    ```bash
+    sqlfluff lint --library-path /path/to/macros query.sql
+    sqlfluff lint --library-path none query.sql
+    ```
+  </Accordion>
+
+  <Accordion title="--stdin-filename PATH">
+    When reading from stdin (`-`), treat the content as if it came from this file path. SQLFluff uses the path to discover the correct config and file type.
+
+    ```bash
+    cat query.sql | sqlfluff lint --stdin-filename query.sql -
+    ```
+  </Accordion>
+
+  <Accordion title="--bench">
+    Print benchmark timing information after the run completes.
+
+    ```bash
+    sqlfluff lint --bench .
+    ```
+  </Accordion>
+
+  <Accordion title="--logger [templater|lexer|parser|linter|rules|config]">
+    Restrict debug log output to a single internal logger component. Useful when diagnosing a specific stage of processing.
+
+    ```bash
+    sqlfluff lint -vv --logger parser query.sql
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Shell completion
+
+SQLFluff supports shell completion for `bash`, `zsh`, and `fish`. To install completion for your shell, run the appropriate command below.
+
+<Tabs>
+  <Tab title="bash">
+    ```bash
+    eval "$(_SQLFLUFF_COMPLETE=bash_source sqlfluff)"
+    ```
+
+    Add this line to your `~/.bashrc` to enable it permanently:
+
+    ```bash
+    echo 'eval "$(_SQLFLUFF_COMPLETE=bash_source sqlfluff)"' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+  </Tab>
+  <Tab title="zsh">
+    ```zsh
+    eval "$(_SQLFLUFF_COMPLETE=zsh_source sqlfluff)"
+    ```
+
+    Add this line to your `~/.zshrc` to enable it permanently:
+
+    ```zsh
+    echo 'eval "$(_SQLFLUFF_COMPLETE=zsh_source sqlfluff)"' >> ~/.zshrc
+    source ~/.zshrc
+    ```
+  </Tab>
+  <Tab title="fish">
+    ```fish
+    _SQLFLUFF_COMPLETE=fish_source sqlfluff | source
+    ```
+
+    To enable permanently, save the completion script:
+
+    ```fish
+    _SQLFLUFF_COMPLETE=fish_source sqlfluff > ~/.config/fish/completions/sqlfluff.fish
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  Shell completion is powered by Click's completion mechanism. After installing, you can press Tab to complete subcommand names, flags, and — for `--dialect` — dialect names.
+</Note>
+
+## Configuration discovery
+
+SQLFluff discovers configuration by walking up the directory tree from the file being linted, merging `.sqlfluff`, `setup.cfg`, `tox.ini`, and `pyproject.toml` files along the way. The file closest to the SQL file takes highest precedence.
+
+Use `--config` to supply an additional config file on top of the discovered chain, or `--ignore-local-config` to skip the discovery process entirely.
+
+```bash
+# Use only a custom config file, ignoring all project configs
+sqlfluff lint --ignore-local-config --config /ci/.sqlfluff .
+```

@@ -1,0 +1,242 @@
+---
+title: "sqlfluff fix"
+description: "Automatically apply fixes for linting violations. Rewrites SQL files in place."
+---
+
+```bash
+sqlfluff fix [OPTIONS] [PATHS]...
+```
+
+`sqlfluff fix` runs the linter with fix mode enabled, then rewrites SQL files with all fixable violations corrected. It is the primary tool for automatically reformatting and correcting SQL.
+
+`PATHS` can be:
+- A path to a `.sql` file: `path/to/query.sql`
+- A directory of SQL files: `path/to/sql/`
+- `.` or a blank to fix the current working directory
+- `-` (a lone dash) to read from stdin and write fixed SQL to stdout
+
+## How fix works
+
+<Steps>
+  <Step title="Lint all files">
+    SQLFluff lints each file in the same way as `sqlfluff lint`, identifying all violations.
+  </Step>
+  <Step title="Identify fixable violations">
+    Each violation is classified as fixable or unfixable. Not every rule can generate an automatic fix — for example, ambiguous aliasing violations require a human decision.
+  </Step>
+  <Step title="Apply fixes and rewrite">
+    Fixable violations are corrected and written back to each file. By default, this happens file-by-file during linting.
+  </Step>
+</Steps>
+
+<Warning>
+  `sqlfluff fix` rewrites files in place. Commit or back up your SQL before running fix on a large codebase for the first time.
+</Warning>
+
+## What fix can and cannot fix
+
+Not every rule generates an automatic fix. Rules fall into two categories:
+
+| Category | Examples |
+|---|---|
+| **Fixable** — SQLFluff rewrites the SQL automatically | Whitespace (`LT01`), indentation (`LT02`), keyword capitalisation (`CP01`), trailing commas (`CV06`) |
+| **Unfixable** — Requires manual intervention | Some structural or ambiguous violations where SQLFluff cannot determine the intended result without context |
+
+After running, SQLFluff reports the number of fixable violations applied and any unfixable violations remaining.
+
+## Examples
+
+```bash
+# Fix a single file
+sqlfluff fix query.sql --dialect ansi
+
+# Fix a directory recursively
+sqlfluff fix src/queries/ --dialect postgres
+
+# Fix only specific rules
+sqlfluff fix query.sql --dialect ansi --rules LT01,CP01
+
+# Preview fixes without applying (interactive confirmation)
+sqlfluff fix --check query.sql --dialect ansi
+
+# Fix from stdin, output to stdout
+cat query.sql | sqlfluff fix --dialect ansi -
+
+# Save a copy of each fixed file with a suffix instead of overwriting
+sqlfluff fix query.sql --dialect ansi --fixed-suffix .fixed
+
+# Fix even files with parse errors (use with caution)
+sqlfluff fix query.sql --dialect ansi --FIX-EVEN-UNPARSABLE
+```
+
+## Options
+
+### Dialect and rules
+
+<ParamField path="--dialect" type="string">
+  The SQL dialect to use. Overrides `dialect` in `.sqlfluff`.
+</ParamField>
+
+<ParamField path="--rules" type="string">
+  Apply fixes only for the listed rules. Accepts a comma-separated list of rule codes or group names.
+
+  ```bash
+  sqlfluff fix --rules LT01,LT02 query.sql
+  ```
+</ParamField>
+
+<ParamField path="--exclude-rules" type="string">
+  Exclude specific rules from the fix run. Accepts a comma-separated list of rule codes or group names.
+</ParamField>
+
+### Configuration
+
+<ParamField path="--config" type="path">
+  Path to an additional `.sqlfluff` config file (INI/CFG format), loaded on top of the normal discovery chain.
+</ParamField>
+
+<ParamField path="--ignore-local-config" type="boolean">
+  Skip config files found by the normal directory-tree discovery.
+</ParamField>
+
+### Fix behaviour
+
+<ParamField path="--check" type="boolean">
+  Analyse all files and display fixable violations, then prompt for confirmation before applying any fixes. All fixes are applied at the end rather than file-by-file.
+
+  ```bash
+  sqlfluff fix --check .
+  ```
+</ParamField>
+
+<ParamField path="-x, --fixed-suffix" type="string">
+  Write fixed output to a new file with this suffix appended, rather than overwriting the original.
+
+  ```bash
+  sqlfluff fix query.sql --fixed-suffix .fixed
+  # produces query.sql.fixed
+  ```
+</ParamField>
+
+<ParamField path="--FIX-EVEN-UNPARSABLE" type="boolean">
+  Attempt to fix files that contain templating or parse errors. By default, SQLFluff skips fixes on unparsable files to avoid corrupting SQL that it cannot fully understand.
+
+  <Warning>
+    Fixing unparsable files can produce invalid SQL. Only use this option if you understand the parse errors and accept the risk.
+  </Warning>
+</ParamField>
+
+<ParamField path="--show-lint-violations" type="boolean">
+  After fixing, display any unfixable lint violations that remain. Useful for identifying issues that require manual attention.
+</ParamField>
+
+<ParamField path="-q, --quiet" type="boolean">
+  Reduce stdout output to a minimal level. Only takes effect when `--check` is not set.
+</ParamField>
+
+<ParamField path="-f, --force" type="boolean" deprecated>
+  Deprecated since SQLFluff 3.0. Fix-as-you-go is now the default behaviour. This flag is accepted for backward compatibility but has no effect.
+</ParamField>
+
+### Performance
+
+<ParamField path="--processes" type="integer">
+  Number of parallel worker processes. `0` uses all available CPUs. Negative values subtract from the available count.
+
+  ```bash
+  sqlfluff fix --processes 4 .
+  ```
+</ParamField>
+
+<ParamField path="--disable-progress-bar" type="boolean">
+  Hide the progress bar when fixing large numbers of files.
+</ParamField>
+
+<ParamField path="--persist-timing" type="path">
+  Write per-file timing data to a CSV file for external analysis.
+
+  <Note>
+    This feature is in beta. The CSV format may change between releases without notice.
+  </Note>
+</ParamField>
+
+<ParamField path="--disregard-sqlfluffignores" type="boolean">
+  Fix files even if they match patterns in `.sqlfluffignore`.
+</ParamField>
+
+### Encoding and parsing
+
+<ParamField path="--encoding" type="string">
+  File encoding to use when reading and writing files. Defaults to autodetect.
+</ParamField>
+
+<ParamField path="--ignore" type="string">
+  Suppress entire families of errors (`parsing`, `templating`). Matching errors are excluded from output and do not block fixes.
+</ParamField>
+
+<ParamField path="--disable-noqa" type="boolean">
+  Ignore all inline `-- noqa` comments.
+</ParamField>
+
+<ParamField path="--disable-noqa-except" type="string">
+  Ignore all inline `-- noqa` comments except those for the listed rule codes.
+</ParamField>
+
+<ParamField path="--warn-unused-ignores" type="boolean">
+  Warn about `-- noqa` comments that do not match any violations.
+</ParamField>
+
+<ParamField path="--recursion-limit" type="integer">
+  Set the Python recursion limit before fixing. Useful for very deeply nested SQL.
+</ParamField>
+
+<ParamField path="--stdin-filename" type="path">
+  When reading from stdin, treat the content as if it came from this path. Used for config discovery.
+</ParamField>
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | All fixable violations were corrected successfully |
+| `1` | Unfixable violations remain, or fixes could not be applied |
+| `2` | Parse error or templating error (and `--FIX-EVEN-UNPARSABLE` is not set) |
+
+## Files with parse errors
+
+By default, `sqlfluff fix` skips any file that has a templating or parse error. This is a safety measure — applying fixes to partially-parsed SQL could corrupt the file.
+
+```text
+==== finding fixable violations ====
+== [broken.sql] ERROR
+  PRS: Found unparsable section: ...
+[1 file(s) skipped due to parse errors]
+```
+
+To override this behaviour:
+
+```bash
+sqlfluff fix --FIX-EVEN-UNPARSABLE broken.sql --dialect ansi
+```
+
+## Fixing from stdin
+
+Pass `-` as the path to read SQL from stdin and write fixed SQL to stdout.
+
+```bash
+cat query.sql | sqlfluff fix --dialect ansi -
+```
+
+Any errors are written to stderr, and the fixed (or original) SQL is written to stdout.
+
+<CodeGroup>
+
+```bash before
+echo 'select a+b from my_table' | sqlfluff fix --dialect ansi -
+```
+
+```sql after
+SELECT a + b FROM my_table
+```
+
+</CodeGroup>

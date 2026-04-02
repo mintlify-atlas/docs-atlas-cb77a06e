@@ -1,0 +1,103 @@
+---
+title: "Supported dialects"
+description: "All 28 SQL dialects supported by SQLFluff, with the --dialect flag value for each."
+---
+
+SQLFluff supports 28 SQL dialects. Pass the value in the **`--dialect` flag** column to the CLI or set it in your `.sqlfluff` config file.
+
+```bash
+sqlfluff lint query.sql --dialect <flag-value>
+```
+
+```ini .sqlfluff
+[sqlfluff]
+dialect = <flag-value>
+```
+
+## Dialect list
+
+| Dialect | `--dialect` flag | Notes |
+|---------|-----------------|-------|
+| ANSI SQL | `ansi` | Base dialect. All others inherit from this. |
+| Athena | `athena` | AWS Athena |
+| BigQuery | `bigquery` | Google BigQuery |
+| ClickHouse | `clickhouse` | |
+| Databricks | `databricks` | Extends `sparksql` with Unity Catalog syntax |
+| Db2 | `db2` | IBM Db2 |
+| Doris | `doris` | Apache Doris |
+| DuckDB | `duckdb` | |
+| Exasol | `exasol` | |
+| FlinkSQL | `flinksql` | Apache Flink |
+| Greenplum | `greenplum` | Inherits from PostgreSQL |
+| Hive | `hive` | Apache Hive |
+| Impala | `impala` | Apache Impala |
+| MariaDB | `mariadb` | Inherits from MySQL |
+| Materialize | `materialize` | |
+| MySQL | `mysql` | |
+| Oracle | `oracle` | |
+| PostgreSQL | `postgres` | aka Postgres |
+| Redshift | `redshift` | Amazon Redshift; inherits from PostgreSQL |
+| Snowflake | `snowflake` | |
+| SOQL | `soql` | Salesforce Object Query Language |
+| SparkSQL | `sparksql` | Apache Spark |
+| SQLite | `sqlite` | |
+| StarRocks | `starrocks` | |
+| Teradata | `teradata` | |
+| Transact-SQL | `tsql` | aka T-SQL; Microsoft SQL Server and Azure SQL |
+| Trino | `trino` | |
+| Vertica | `vertica` | |
+
+<Note>
+  Dialect support is community-driven and may not cover every feature of a given platform. If you encounter a parse error on valid SQL, the dialect may not yet support that syntax.
+
+  Raise an issue or open a pull request on [GitHub](https://github.com/sqlfluff/sqlfluff/issues) — contributions that add missing syntax are especially welcome.
+</Note>
+
+## Checking available dialects
+
+To print the dialects available in your installed version of SQLFluff, run:
+
+```bash
+sqlfluff dialects
+```
+
+This is useful when you are unsure of the exact flag value, or when running a version of SQLFluff that may differ from this documentation.
+
+## ANSI as the default
+
+If you do not specify a dialect, SQLFluff defaults to `ansi`. ANSI SQL is the base dialect from which all others inherit. It models the SQL standard and is the most conservative option — it does not include vendor-specific extensions.
+
+<Tip>
+  Even if your SQL is for a specific platform, setting the correct dialect (e.g. `snowflake`, `bigquery`) gives SQLFluff an accurate grammar to parse against and produces more relevant lint results. Using `ansi` for platform-specific SQL may produce false-positive parse errors.
+</Tip>
+
+## Dialect inheritance
+
+Dialects inherit from one another to share common grammar and avoid duplication. The inheritance chain always traces back to `ansi`:
+
+<AccordionGroup>
+  <Accordion title="PostgreSQL family">
+    `ansi` → `postgres` → `redshift`
+
+    `ansi` → `postgres` → `greenplum`
+  </Accordion>
+  <Accordion title="MySQL family">
+    `ansi` → `mysql` → `mariadb`
+  </Accordion>
+  <Accordion title="Spark / Databricks family">
+    `ansi` → `hive` → `sparksql` → `databricks`
+  </Accordion>
+</AccordionGroup>
+
+Inheritance is a code-reuse mechanism — it does not guarantee SQL compatibility between a dialect and its parent. See the [dialects overview](/dialects/overview) for a full explanation.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Dialects overview" icon="circle-info" href="/dialects/overview">
+    How dialects work, how to configure them, and how inheritance is structured.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/overview">
+    Set the dialect and other SQLFluff options via config file or CLI.
+  </Card>
+</CardGroup>

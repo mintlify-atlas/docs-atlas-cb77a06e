@@ -1,0 +1,152 @@
+---
+title: "Ignoring Files and Violations"
+description: "Use .sqlfluffignore, noqa comments, and the --ignore flag to suppress SQLFluff violations selectively."
+---
+
+SQLFluff provides several mechanisms for suppressing violations: ignoring individual lines, ignoring ranges of lines, excluding entire files, and ignoring whole categories of errors.
+
+## Inline `noqa` comments
+
+Similar to [flake8's inline ignore](https://flake8.pycqa.org/en/3.1.1/user/ignoring-errors.html#in-line-ignoring-errors), individual lines can be ignored by appending `-- noqa` to the end of the line.
+
+### Ignore all violations on a line
+
+```sql
+SeLeCt  1 from tBl ;    -- noqa
+```
+
+### Ignore specific rules on a line
+
+Provide a comma-separated list of rule codes or category names:
+
+```sql
+-- Ignore rule CP02 and rule CP03
+SeLeCt  1 from tBl ;    -- noqa: CP02,CP03
+```
+
+### Ignore parse errors on a line
+
+```sql
+-- Ignore all parsing errors
+SeLeCt from tBl ;       -- noqa: PRS
+```
+
+<Warning>
+Ignoring `TMP` and `PRS` errors can lead to incorrect `sqlfluff lint` and `sqlfluff fix` results, as SQLFluff may misinterpret the SQL being analysed.
+</Warning>
+
+## Ignoring line ranges
+
+Similar to [pylint's disable directive](http://pylint.pycqa.org/en/latest/user_guide/message-control.html), ranges of lines can be ignored using `-- noqa: disable` and `-- noqa: enable` directives.
+
+### Disable specific rules from a line forward
+
+```sql
+-- Ignore rule AL02 from this line forward
+SELECT col_a a FROM foo -- noqa: disable=AL02
+```
+
+### Disable all rules from a line forward
+
+```sql
+SELECT col_a a FROM foo -- noqa: disable=all
+```
+
+### Re-enable rules from a line forward
+
+```sql
+SELECT col_a a FROM foo -- noqa: enable=all
+```
+
+## `.sqlfluffignore` file
+
+Similar to `.gitignore` and `.dockerignore`, SQLFluff supports a `.sqlfluffignore` file to control which files are and aren't linted. SQLFluff uses the [pathspec library](https://python-path-specification.readthedocs.io/) to process these patterns.
+
+Place the `.sqlfluffignore` file in the root of your project:
+
+```cfg
+# Comments start with a hash.
+
+# Ignore anything in the "temp" path
+/temp/
+
+# Ignore anything called "testing.sql"
+testing.sql
+
+# Ignore any ".tsql" files
+*.tsql
+```
+
+<Tip>
+Ignore files can also be placed in subdirectories. The patterns in a subdirectory's `.sqlfluffignore` apply only within that subdirectory.
+</Tip>
+
+## Ignoring paths via `pyproject.toml`
+
+If you use `pyproject.toml` for SQLFluff configuration, you can ignore files and directories using `ignore_paths` in `[tool.sqlfluff.core]`:
+
+```toml
+[tool.sqlfluff.core]
+ignore_paths = [
+    "target/",
+    "supabase/migrations/*",
+    "generated/*.sql",
+]
+```
+
+The patterns in `ignore_paths` use the same matching rules as `.sqlfluffignore`.
+
+## Ignoring categories of errors with `--ignore`
+
+General categories of errors can be ignored using the `--ignore` command-line flag or the `ignore` setting in the config file.
+
+```bash
+sqlfluff lint myfile.sql --ignore parsing
+```
+
+```cfg
+[sqlfluff]
+ignore = parsing
+```
+
+The following categories can be ignored:
+
+| Category | Description |
+|---|---|
+| `lexing` | Errors from the lexer |
+| `linting` | Rule violations |
+| `parsing` | SQL parse errors |
+| `templating` | Errors from the templater |
+
+Multiple categories can be comma-separated:
+
+```bash
+sqlfluff lint myfile.sql --ignore parsing,templating
+```
+
+## Unused `noqa` warnings
+
+SQLFluff can warn you when a `-- noqa` comment is no longer needed (i.e., the violation it was suppressing no longer exists):
+
+```cfg
+[sqlfluff]
+warn_unused_ignores = True
+```
+
+## Disabling `noqa` globally
+
+To test whether all `-- noqa` comments are still required, you can disable inline overrides entirely:
+
+```cfg
+[sqlfluff]
+disable_noqa = True
+```
+
+To disable all `noqa` comments *except* for specific rules:
+
+```cfg
+[sqlfluff]
+disable_noqa_except = CP01, LT01
+```
+
+`disable_noqa_except` takes priority over `disable_noqa`.

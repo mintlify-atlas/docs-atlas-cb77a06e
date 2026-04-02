@@ -1,0 +1,149 @@
+---
+title: "Installation"
+description: "Install SQLFluff via pip, Docker, or pre-commit. Supports Python 3.9 and later."
+---
+
+## Requirements
+
+SQLFluff requires **Python 3.9 or later**. It supports CPython 3.9 through 3.14 on Linux, macOS, and Windows.
+
+To verify your Python version:
+
+```bash
+python --version
+```
+
+```text
+Python 3.13.1
+```
+
+If you do not have Python installed, follow the [official Python installation guide](https://wiki.python.org/moin/BeginnersGuide/Download) for your platform.
+
+---
+
+## Install via pip
+
+### Standard install
+
+The simplest way to install SQLFluff is with pip:
+
+```bash
+pip install sqlfluff
+```
+
+### With Rust acceleration
+
+SQLFluff includes an optional Rust-based component (`sqlfluffrs`) that accelerates lexing and parsing for large files. Install it with the `rs` extra:
+
+```bash
+pip install "sqlfluff[rs]"
+```
+
+<Note>
+  The Rust extra requires a compatible binary wheel for your platform. If a pre-built wheel is not available, pip will attempt to compile from source — which requires a Rust toolchain.
+</Note>
+
+### Verify the installation
+
+After installing, confirm SQLFluff is working by checking its version:
+
+```bash
+sqlfluff --version
+```
+
+```text
+sqlfluff, version 4.1.0
+```
+
+---
+
+## Install via Docker
+
+SQLFluff publishes an official Docker image on Docker Hub.
+
+**Pull the image:**
+
+```bash
+docker pull sqlfluff/sqlfluff
+```
+
+**Lint a SQL file using Docker:**
+
+```bash
+docker run --rm -v "$(pwd):/sql" sqlfluff/sqlfluff lint /sql/test.sql --dialect ansi
+```
+
+**Fix a SQL file using Docker:**
+
+```bash
+docker run --rm -v "$(pwd):/sql" sqlfluff/sqlfluff fix /sql/test.sql --dialect ansi
+```
+
+The `-v "$(pwd):/sql"` flag mounts the current directory into the container at `/sql`, giving SQLFluff access to your local files.
+
+<Tip>
+  You can also try SQLFluff without installing anything at [online.sqlfluff.com](https://online.sqlfluff.com).
+</Tip>
+
+---
+
+## Pre-commit integration
+
+SQLFluff integrates with [pre-commit](https://pre-commit.com) to enforce SQL style automatically before every commit.
+
+Add the following to your `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/sqlfluff/sqlfluff
+    rev: 4.1.0
+    hooks:
+      - id: sqlfluff-lint
+      - id: sqlfluff-fix
+```
+
+See the [pre-commit integration guide](/production/pre-commit) for full configuration options, including how to pass dialect and rule flags.
+
+---
+
+## VS Code extension
+
+SQLFluff has an official VS Code extension that provides inline linting as you type.
+
+- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=dorzey.vscode-sqlfluff)
+- [Extension source on GitHub](https://github.com/sqlfluff/vscode-sqlfluff)
+
+Install it by searching for **SQLFluff** in the VS Code Extensions panel, or by running:
+
+```bash
+code --install-extension dorzey.vscode-sqlfluff
+```
+
+---
+
+## Upgrading
+
+To upgrade an existing installation to the latest version:
+
+```bash
+pip install --upgrade sqlfluff
+```
+
+SQLFluff follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Breaking changes are restricted to major version releases. See the [changelog](https://github.com/sqlfluff/sqlfluff/blob/main/CHANGELOG.md) for details on what changed between versions.
+
+<Warning>
+  When upgrading, check the release notes for any configuration changes or renamed rules that may affect your existing `.sqlfluff` config file.
+</Warning>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Lint and fix your first SQL file with a step-by-step walkthrough.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration/overview">
+    Set up your .sqlfluff config file and customise rules for your team.
+  </Card>
+</CardGroup>

@@ -1,0 +1,153 @@
+---
+title: "Pre-commit hooks"
+description: "Enforce SQL style automatically before every git commit using the pre-commit framework and SQLFluff's built-in hooks."
+---
+
+[pre-commit](https://pre-commit.com/) is a framework for managing git hooks — scripts that run automatically before a commit is made. Integrating SQLFluff as a pre-commit hook gives SQL developers instant feedback on style violations and can optionally auto-fix them before the commit lands.
+
+Because pre-commit passes only the files changed in the commit to SQLFluff, linting is fast even in large repositories.
+
+## Hooks provided
+
+SQLFluff ships two pre-commit hooks:
+
+<CardGroup cols={2}>
+  <Card title="sqlfluff-lint" icon="magnifying-glass">
+    Runs `sqlfluff lint` on changed SQL files and returns any violations. The commit is blocked if violations are found.
+  </Card>
+  <Card title="sqlfluff-fix" icon="wand-magic-sparkles">
+    Runs `sqlfluff fix` on changed SQL files and applies automatic corrections before the commit is recorded.
+  </Card>
+</CardGroup>
+
+<Warning>
+  By default, `sqlfluff-fix` will not modify files that have templating or parse errors, even if those errors are suppressed with `noqa` or `--ignore`. This is a safety measure to avoid corrupting SQL that SQLFluff could not fully understand.
+
+  You can override this behaviour by setting `fix_even_unparsable = true` in your `.sqlfluff` config or by passing `--FIX-EVEN-UNPARSABLE` on the command line. If you do, always review the changes applied to files with parse errors before committing.
+</Warning>
+
+## Setup
+
+<Steps>
+  <Step title="Install pre-commit">
+    Install the pre-commit package into your Python environment:
+
+    ```bash
+    pip install pre-commit
+    ```
+
+    Or with Homebrew on macOS:
+
+    ```bash
+    brew install pre-commit
+    ```
+  </Step>
+
+  <Step title="Create .pre-commit-config.yaml">
+    Create a `.pre-commit-config.yaml` file at the root of your git repository:
+
+    ```yaml .pre-commit-config.yaml
+    repos:
+      - repo: https://github.com/sqlfluff/sqlfluff
+        rev: 3.3.1
+        hooks:
+          - id: sqlfluff-lint
+            # For dbt projects, uncomment the line below and select your adapter.
+            # See https://docs.getdbt.com/docs/available-adapters for options.
+            # additional_dependencies: ['<dbt-adapter>', 'sqlfluff-templater-dbt']
+          - id: sqlfluff-fix
+            # Arbitrary arguments — for example, restrict to specific rules:
+            # args: [--rules, "LT02,CP02"]
+            # additional_dependencies: ['<dbt-adapter>', 'sqlfluff-templater-dbt']
+    ```
+
+    Replace `3.3.1` with the latest SQLFluff release tag.
+
+    <Tip>
+      All CLI flags accepted by `sqlfluff lint` and `sqlfluff fix` can be passed via the `args:` key. For example, `args: [--dialect, snowflake]` sets the dialect without requiring a `.sqlfluff` config file.
+    </Tip>
+  </Step>
+
+  <Step title="Install the hook scripts">
+    Run the following command once to install the hook scripts into your local `.git/hooks` directory:
+
+    ```bash
+    pre-commit install
+    ```
+
+    After this, the hooks run automatically on every `git commit`.
+  </Step>
+
+  <Step title="Run hooks manually (optional)">
+    To run the hooks against all files in the repository — not just staged files — use:
+
+    ```bash
+    pre-commit run sqlfluff-lint --all-files
+    ```
+
+    Or for the fix hook:
+
+    ```bash
+    pre-commit run sqlfluff-fix --all-files
+    ```
+  </Step>
+</Steps>
+
+## Configuring args
+
+Pass any SQLFluff CLI flag through the `args:` list in `.pre-commit-config.yaml`:
+
+```yaml .pre-commit-config.yaml
+hooks:
+  - id: sqlfluff-lint
+    args: [--dialect, ansi, --rules, "LT02,CP02"]
+```
+
+Common args to configure:
+
+| Arg | Purpose |
+|-----|---------|
+| `--dialect <name>` | Set the SQL dialect (e.g. `ansi`, `snowflake`, `bigquery`) |
+| `--rules <codes>` | Lint only the specified rule codes |
+| `--exclude-rules <codes>` | Skip the specified rule codes |
+| `--processes <n>` | Lint in parallel using `n` worker processes |
+| `--config <path>` | Use a config file at a non-default location |
+
+## Using with dbt
+
+To use SQLFluff with the dbt templater, uncomment the `additional_dependencies` line and replace `<dbt-adapter>` with the package for your data warehouse. For example:
+
+```yaml .pre-commit-config.yaml
+- id: sqlfluff-lint
+  additional_dependencies: ['dbt-bigquery==1.7.0', 'sqlfluff-templater-dbt']
+```
+
+This is equivalent to running `pip install dbt-bigquery==1.7.0 sqlfluff-templater-dbt` inside the pre-commit isolated environment. See the [list of available dbt adapters](https://docs.getdbt.com/docs/available-adapters) for the correct package name for your platform.
+
+## Ignoring files
+
+pre-commit passes only the changed files directly to SQLFluff. When using a [`.sqlfluffignore`](/configuration/ignoring) file, SQLFluff may warn that its ignore rules are being overridden because a file was passed explicitly.
+
+To silence these warnings, add an `exclude` pattern to your pre-commit config. This prevents matching files from being passed to the hook at all:
+
+```yaml .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/sqlfluff/sqlfluff
+    rev: 3.3.1
+    hooks:
+      - id: sqlfluff-lint
+        exclude: ^path/to/ignored/
+```
+
+You can apply `exclude` at the top level (affecting all hooks in the file) or at the individual hook level. See the [pre-commit documentation](https://pre-commit.com/#top_level-exclude) for the full syntax.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="CI/CD integration" icon="circle-check" href="/production/ci-cd">
+    Run SQLFluff in GitHub Actions, GitLab CI, and other pipelines.
+  </Card>
+  <Card title="GitHub Actions" icon="github" href="/production/github-actions">
+    Annotate pull requests with lint violations using GitHub Actions.
+  </Card>
+</CardGroup>

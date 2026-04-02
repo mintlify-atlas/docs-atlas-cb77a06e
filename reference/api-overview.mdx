@@ -1,0 +1,65 @@
+---
+title: "Python API Overview"
+description: "Use SQLFluff programmatically from Python to lint, fix, and parse SQL strings."
+---
+
+SQLFluff exposes a Python API so you can integrate SQL linting and fixing directly into your applications, pipelines, and tooling — without shelling out to the CLI.
+
+## When to use the Python API vs the CLI
+
+<CardGroup cols={2}>
+  <Card title="Use the Python API when" icon="code">
+    - You are building a Python application or library
+    - You need to process SQL strings at runtime
+    - You want to integrate linting into a CI pipeline using Python
+    - You need access to the parsed AST for analysis
+  </Card>
+  <Card title="Use the CLI when" icon="terminal">
+    - You are linting files on disk
+    - You want a quick one-off check from the shell
+    - You are integrating with non-Python tools
+    - You want pre-commit hooks or editor integration
+  </Card>
+</CardGroup>
+
+## Installation
+
+The Python API is included in the standard SQLFluff package. No additional dependencies are required.
+
+```bash
+pip install sqlfluff
+```
+
+## Quick example
+
+```python
+import sqlfluff
+
+sql = "SeLEct  *, 1, blah as  fOO  from mySchema.myTable"
+
+# Lint: returns a list of violation dicts
+violations = sqlfluff.lint(sql, dialect="ansi")
+
+# Fix: returns the corrected SQL string
+fixed_sql = sqlfluff.fix(sql, dialect="ansi")
+
+# Parse: returns a dict representing the parse tree
+parse_tree = sqlfluff.parse(sql, dialect="ansi")
+```
+
+## Simple API vs advanced API
+
+SQLFluff provides two levels of API access:
+
+<CardGroup cols={2}>
+  <Card title="Simple API" icon="bolt" href="/reference/api-simple">
+    Three top-level functions — `lint()`, `fix()`, and `parse()` — imported directly from the `sqlfluff` package. Suitable for most use cases.
+  </Card>
+  <Card title="Advanced API" icon="gear" href="/reference/api-advanced">
+    Direct use of the `Linter` and `FluffConfig` classes from `sqlfluff.core`. Gives full control over configuration and parse tree traversal.
+  </Card>
+</CardGroup>
+
+<Note>
+The advanced API (using `Linter` and `FluffConfig` directly from `sqlfluff.core`) is considered experimental. Internal interfaces may change between releases. If you rely on these internals, open an issue on GitHub to help shape a stable public API.
+</Note>

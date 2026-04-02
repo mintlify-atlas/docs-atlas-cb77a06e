@@ -1,0 +1,251 @@
+---
+title: "Configuration Overview"
+description: "How SQLFluff discovers, loads, and cascades configuration files across your project."
+---
+
+SQLFluff accepts configuration either through the command line or through configuration files. There is rough parity between the two approaches, with the exception that templating configuration must be done via a file.
+
+## Configuration files
+
+SQLFluff looks for the following files in order. Later files override any values read from earlier files.
+
+- `setup.cfg`
+- `tox.ini`
+- `pep8.ini`
+- `.sqlfluff`
+- `pyproject.toml`
+
+The first four are read like a standard [cfg file](https://docs.python.org/3/library/configparser.html). SQLFluff looks for sections that start with `sqlfluff`, with subsections delimited by a colon. For example, the `jinjacontext` section is specified as `[sqlfluff:jinjacontext]`.
+
+### `.sqlfluff` / cfg file format
+
+```cfg
+[sqlfluff]
+templater = jinja
+sql_file_exts = .sql,.sql.j2,.dml,.ddl,.pkb
+
+[sqlfluff:indentation]
+indented_joins = False
+indented_using_on = True
+template_blocks_indent = False
+
+[sqlfluff:templater]
+unwrap_wrapped_queries = True
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+```
+
+### `pyproject.toml` format
+
+For `pyproject.toml`, all valid sections start with `tool.sqlfluff`, with subsections delimited by dots.
+
+```toml
+[tool.sqlfluff.core]
+templater = "jinja"
+sql_file_exts = ".sql,.sql.j2,.dml,.ddl,.pkb"
+
+[tool.sqlfluff.indentation]
+indented_joins = false
+indented_using_on = true
+template_blocks_indent = false
+
+[tool.sqlfluff.templater]
+unwrap_wrapped_queries = true
+
+[tool.sqlfluff.templater.jinja]
+apply_dbt_builtins = true
+
+# Rule-specific config uses dots between names exactly as in .sqlfluff
+[tool.sqlfluff.rules.capitalisation.keywords]
+capitalisation_policy = "upper"
+```
+
+## Configuration hierarchy and cascading
+
+SQLFluff uses **nesting** in its configuration files. Files closer to the file being linted override values from files found higher up. The final config is a patchwork of all values from the config files loaded up to that path.
+
+<Note>
+The `templater` value cannot be set in config files in subdirectories of the working directory.
+</Note>
+
+SQLFluff loads config in the following order, with each step overriding values from previous steps:
+
+<Steps>
+  <Step title="Package defaults">
+    SQLFluff ships with a built-in default config. See the [default configuration](/configuration/overview#default-configuration) section below.
+  </Step>
+  <Step title="OS app config directory">
+    SQLFluff looks in the OS-specific app config directory: `~/.config/sqlfluff` on macOS and Unix, or `<home>\AppData\Local\sqlfluff\sqlfluff` on Windows.
+  </Step>
+  <Step title="Home directory">
+    SQLFluff looks for config files in the user's home directory (`~`).
+  </Step>
+  <Step title="Directories between home and working directory">
+    If the current working directory is a subdirectory of the home directory, SQLFluff looks in all intermediate directories.
+  </Step>
+  <Step title="Current working directory">
+    SQLFluff looks for config files in the current working directory.
+  </Step>
+  <Step title="Subdirectories to the file being linted">
+    SQLFluff looks for config files in every subdirectory between the current working directory and the file being linted.
+  </Step>
+  <Step title="Directory containing the file being linted">
+    SQLFluff looks for config files in the same directory as the file being linted.
+  </Step>
+</Steps>
+
+## Key configuration sections
+
+<AccordionGroup>
+  <Accordion title="[sqlfluff] — core settings">
+    The main section controls top-level behavior: dialect, templater, enabled rules, line length, file extensions, and more.
+
+    ```cfg
+    [sqlfluff]
+    dialect = ansi
+    templater = jinja
+    rules = all
+    exclude_rules = None
+    max_line_length = 80
+    sql_file_exts = .sql,.sql.j2,.dml,.ddl,.pkb
+    ```
+  </Accordion>
+  <Accordion title="[sqlfluff:rules] — shared rule settings">
+    Common rule configurations that apply across multiple rules.
+
+    ```cfg
+    [sqlfluff:rules]
+    allow_scalar = True
+    single_table_references = consistent
+    unquoted_identifiers_policy = all
+    ```
+  </Accordion>
+  <Accordion title="[sqlfluff:indentation] — indentation settings">
+    Controls indent behavior including join indentation, CTE indentation, implicit indents, and tab sizing.
+
+    ```cfg
+    [sqlfluff:indentation]
+    indent_unit = space
+    tab_space_size = 4
+    indented_joins = False
+    indented_ctes = False
+    implicit_indents = forbid
+    ```
+  </Accordion>
+  <Accordion title="[sqlfluff:layout:type:*] — spacing and line breaks">
+    Controls the treatment of spacing and line breaks for specific element types.
+
+    ```cfg
+    [sqlfluff:layout:type:comma]
+    spacing_before = touch
+    line_position = trailing
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Minimal starter config
+
+When starting a new project, keep your config file minimal. The config file acts as documentation for your team — it should record only the decisions that differ from the defaults, making your choices explicit.
+
+```cfg
+[sqlfluff]
+# Set your SQL dialect
+dialect = snowflake
+templater = jinja
+exclude_rules = ambiguous.column_count, structure.column_order
+max_line_length = 120
+# Use all available CPU cores except one
+processes = -1
+
+[sqlfluff:templater:dbt]
+project_dir = ./
+
+[sqlfluff:indentation]
+implicit_indents = allow
+
+[sqlfluff:rules:aliasing.length]
+min_alias_length = 3
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+[sqlfluff:rules:capitalisation.identifiers]
+extended_capitalisation_policy = lower
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = lower
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = lower
+[sqlfluff:rules:capitalisation.types]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:convention.not_equal]
+preferred_not_equal_style = c_style
+```
+
+<Warning>
+Do not copy the entire default config as your starter config. Defining only values that differ from defaults makes your team's choices clear and makes future upgrades easier.
+</Warning>
+
+## Dialect setting
+
+The `dialect` setting is required. If not set, SQLFluff will raise an error when linting. Set it in the `[sqlfluff]` section:
+
+```cfg
+[sqlfluff]
+dialect = postgres
+```
+
+Run `sqlfluff dialects` to see all supported dialects.
+
+## Using the `--config` flag
+
+You can specify a custom config file path directly on the command line:
+
+```bash
+sqlfluff lint myfile.sql --config path/to/my/.sqlfluff
+```
+
+This is useful for projects that store config files in non-standard locations or for running SQLFluff with different configurations in CI.
+
+## Environment variables
+
+SQLFluff does not directly support environment variable substitution in config files. Use templating (Jinja or Python) or command-line flags to inject dynamic values at runtime.
+
+## In-file configuration directives
+
+Individual SQL files can modify configuration using inline comment directives. These are parsed before the rest of the file, so they affect both rule and parsing configuration.
+
+The syntax must start with `-- sqlfluff` followed by a colon-separated config path:
+
+```sql
+-- Set indented joins for this file
+-- sqlfluff:indentation:indented_joins:True
+
+-- Use a smaller indent size
+-- sqlfluff:indentation:tab_space_size:2
+
+-- Enforce uppercase keywords in this file
+-- sqlfluff:rules:capitalisation.keywords:capitalisation_policy:upper
+
+SELECT *
+FROM a
+  JOIN b USING(c)
+```
+
+<Tip>
+Only use in-file directives for configuration specific to a single file. For project-wide or directory-level configuration, use nested config files instead.
+</Tip>
+
+## Learn more
+
+<CardGroup cols={2}>
+  <Card title="Rule Configuration" href="/configuration/rules">
+    Enable, disable, and tune individual rules.
+  </Card>
+  <Card title="Ignoring Files and Violations" href="/configuration/ignoring">
+    Use `.sqlfluffignore` and `-- noqa` to suppress violations.
+  </Card>
+  <Card title="Layout and Formatting" href="/configuration/layout">
+    Configure indentation, line length, spacing, and line breaks.
+  </Card>
+</CardGroup>

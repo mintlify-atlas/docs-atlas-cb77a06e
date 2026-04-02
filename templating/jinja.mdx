@@ -1,0 +1,300 @@
+---
+title: "Jinja Templating"
+description: "Configure and use the Jinja templater to render Jinja2-based SQL templates with SQLFluff."
+---
+
+The Jinja templater uses [Jinja2](https://jinja.palletsprojects.com/) to render SQL templates. It is the default templater in SQLFluff and supports variables, macros, filters, loops, and conditionals.
+
+## Basic setup
+
+Set the templater in your `.sqlfluff` config:
+
+```cfg .sqlfluff
+[sqlfluff]
+templater = jinja
+```
+
+## Configuration methods
+
+There are three complementary ways to configure the Jinja templater:
+
+| Method | Variables | Macros | Filters |
+|---|---|---|---|
+| Config file | Yes | Yes | No |
+| Macro path | No | Yes | No |
+| Library | Yes | Yes | Yes |
+
+A full example using all options:
+
+```cfg .sqlfluff
+[sqlfluff]
+templater = jinja
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+load_macros_from_path = my_macros
+loader_search_path = included_templates
+library_path = sqlfluff_libs
+exclude_macros_from_path = my_macros_exclude
+
+[sqlfluff:templater:jinja:context]
+my_list = ['a', 'b', 'c']
+MY_LIST = ("d", "e", "f")
+my_where_dict = {"field_1": 1, "field_2": 2}
+
+[sqlfluff:templater:jinja:macros]
+a_macro_def = {% macro my_macro(n) %}{{ n }} + {{ n * 2 }}{% endmacro %}
+```
+
+## Variables
+
+### Simple variables
+
+Supply template variables in the `[sqlfluff:templater:jinja:context]` section:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja:context]
+num_things=456
+tbl_name=my_table
+```
+
+Given the SQL:
+
+```sql
+SELECT {{ num_things }} FROM {{ tbl_name }} WHERE id > 10 LIMIT 5
+```
+
+SQLFluff renders it as:
+
+```sql
+SELECT 456 FROM my_table WHERE id > 10 LIMIT 5
+```
+
+### Complex variables (native Python types and case sensitivity)
+
+Variable names are case-sensitive, and values are interpreted as native Python types:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja:context]
+my_list = ['a', 'b', 'c']
+MY_LIST = ("d", "e", "f")
+my_where_dict = {"field_1": 1, "field_2": 2}
+```
+
+```sql
+SELECT
+    {% for elem in MY_LIST %}
+        '{{elem}}' {% if not loop.last %}||{% endif %}
+    {% endfor %} as concatenated_list
+FROM tbl
+WHERE
+    {% for field, value in my_where_dict.items() %}
+        {{field}} = {{value}} {% if not loop.last %}and{% endif %}
+    {% endfor %}
+```
+
+Renders as:
+
+```sql
+SELECT
+    'd' || 'e' || 'f' as concatenated_list
+FROM tbl
+WHERE
+    field_1 = 1 and field_2 = 2
+```
+
+## Macros
+
+### Macros from config
+
+Define macros in the `[sqlfluff:templater:jinja:macros]` section:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja:macros]
+a_macro_def = {% macro my_macro(n) %}{{ n }} + {{ n * 2 }}{% endmacro %}
+```
+
+Given this SQL:
+
+```sql
+SELECT {{ my_macro(6) }} FROM some_table
+```
+
+SQLFluff renders it as:
+
+```sql
+SELECT 6 + 12 FROM some_table
+```
+
+The config key (e.g. `a_macro_def`) is not used as the macro name — the macro name comes from the `{% macro %}` definition itself. The key is used by the config loader to allow downstream config files to selectively override macro definitions.
+
+### Macros from files
+
+Load macros from `.sql` files or directories using `load_macros_from_path`:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja]
+load_macros_from_path = my_macros,other_macros
+```
+
+Paths are relative to the config file. SQLFluff loads all macros from the specified directories (including subdirectories) into the Jinja global namespace, making them available in every `.sql` file without requiring an explicit `include` or `import`.
+
+The `load_macros_from_path` setting also defines the Jinja search path for `include` and `import` directives. For example, if `load_macros_from_path = my_macros` and there is a file `my_macros/subdir/my_file.sql`:
+
+```jinja
+{% include 'subdir/my_file.sql' %}
+```
+
+To exclude specific macros (e.g. custom Jinja tags), use `exclude_macros_from_path`:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja]
+exclude_macros_from_path = my_macros_exclude
+```
+
+<Tip>
+  Macros defined in the config file always take precedence over macros loaded from a path.
+</Tip>
+
+<Note>
+  Whitespace — including newlines — is treated rigorously throughout the templating process. You may choose to provide dummy macros in your config that differ from the actual production macros. The goal is not perfect fidelity; it only needs to work well enough for parsing and linting to be useful.
+</Note>
+
+### Jinja loader search path
+
+To configure Jinja's file search path for `include`/`import` without loading macros into the global namespace, use `loader_search_path`:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja]
+loader_search_path = included_templates,other_templates
+```
+
+Paths are relative to the config file. Unlike `load_macros_from_path`, macros in these folders are not automatically available — they must be explicitly imported using the Jinja `import` directive.
+
+Any folders listed in `load_macros_from_path` are automatically appended to `loader_search_path`. You do not need to list them in both settings.
+
+## Library templating
+
+For library function calls that cannot be handled by macro templating (e.g. `dbt_utils`):
+
+```sql
+SELECT foo, bar FROM baz {{ dbt_utils.group_by(2) }}
+```
+
+Use the `library_path` option to point SQLFluff at a directory of Python modules:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja]
+library_path = sqlfluff_libs
+```
+
+Then define the library function in `sqlfluff_libs/dbt_utils.py`:
+
+```python sqlfluff_libs/dbt_utils.py
+def group_by(n):
+    return "GROUP BY 1,2"
+```
+
+For more complex cases with an `__init__.py`, nested modules are also supported:
+
+<CodeGroup>
+
+```sql query.sql
+SELECT
+   {{ custom_sum('foo', 'bar') }},
+   {{ foo.bar.another_sum('foo', 'bar') }}
+FROM
+   baz
+```
+
+```python sqlfluff_libs/__init__.py
+def custom_sum(a: str, b: str) -> str:
+    return a + b
+```
+
+```python sqlfluff_libs/foo/bar.py
+def another_sum(a: str, b: str) -> str:
+    return a + b
+```
+
+</CodeGroup>
+
+### Exposing Jinja filters via library
+
+Set a `SQLFLUFF_JINJA_FILTERS` dictionary in the library's `__init__.py` to expose custom Jinja filters:
+
+```python sqlfluff_libs/__init__.py
+import datetime
+
+def ds_filter(value: datetime.date | datetime.time | None) -> str | None:
+    """Date filter."""
+    if value is None:
+        return None
+    return value.strftime("%Y-%m-%d")
+
+SQLFLUFF_JINJA_FILTERS = {"ds": ds_filter}
+```
+
+The filter is then available in SQL templates:
+
+```sql
+SELECT "{{ "2000-01-01" | ds }}";
+```
+
+## Built-in dbt macro blocks
+
+SQLFluff ships with built-in mock macros to support dbt-style templates without requiring the dbt templater:
+
+- **`ref`** — returns the model reference as the table name
+- **`config`** — a no-op macro (returns nothing, used to satisfy config calls)
+
+Enable them with:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+```
+
+<Note>
+  For dbt projects, the dedicated [dbt templater](/templating/dbt) is recommended over using `apply_dbt_builtins`. It provides full macro support and eliminates the need for these overrides.
+</Note>
+
+## Handling undefined variables
+
+When `--ignore=templating` is passed (or `ignore = templating` is set in config), undefined variables are handled gracefully instead of raising errors:
+
+- Undefined variables are replaced with their own name as a string value
+- `{% include query %}` with undefined `query` returns a file containing the string `query`
+- `{% include "query_file.sql" %}` for a missing file returns a file containing `query_file`
+
+For example:
+
+```sql
+select {{ my_variable }}
+from {% include "my_table.sql" %}
+```
+
+Is interpreted as:
+
+```sql
+select my_variable
+from my_table
+```
+
+Because the substituted values behave like Jinja's `Undefined`, you can use the `default()` filter:
+
+```sql
+select {{ my_variable | default("col_a") }}
+from my_table
+```
+
+Renders as:
+
+```sql
+select col_a
+from my_table
+```
+
+<Warning>
+  Ignoring templating errors does not guarantee that every file will be parsable or fixable. It reduces the need to enumerate all variables in config but may produce only partially valid SQL in some cases.
+</Warning>

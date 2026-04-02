@@ -1,0 +1,352 @@
+---
+title: "Simple API"
+description: "Reference for sqlfluff.lint(), sqlfluff.fix(), and sqlfluff.parse()."
+---
+
+The simple API exposes three functions — `lint`, `fix`, and `parse` — directly on the `sqlfluff` package. Import the package and call them directly; no class instantiation required.
+
+```python
+import sqlfluff
+```
+
+---
+
+## `sqlfluff.lint()`
+
+Lint a SQL string and return a list of violations.
+
+```python
+def lint(
+    sql: str,
+    dialect: Optional[str] = None,
+    rules: Optional[list[str]] = None,
+    exclude_rules: Optional[list[str]] = None,
+    config: Optional[FluffConfig] = None,
+    config_path: Optional[str] = None,
+) -> list[dict[str, Any]]: ...
+```
+
+### Parameters
+
+<ParamField path="sql" type="string" required>
+  The SQL string to lint.
+</ParamField>
+
+<ParamField path="dialect" type="string" default="ansi">
+  The SQL dialect to use. Examples: `"ansi"`, `"bigquery"`, `"postgres"`, `"snowflake"`, `"tsql"`, `"mysql"`. If not specified, defaults to `"ansi"`.
+</ParamField>
+
+<ParamField path="rules" type="string[]">
+  A list of rule codes to limit linting to. If omitted, all rules apply. Example: `["CP01", "LT01"]`.
+</ParamField>
+
+<ParamField path="exclude_rules" type="string[]">
+  A list of rule codes to skip. Example: `["AL07"]`.
+</ParamField>
+
+<ParamField path="config" type="FluffConfig">
+  A pre-built `FluffConfig` object. When provided, `dialect`, `rules`, `exclude_rules`, and `config_path` are ignored.
+</ParamField>
+
+<ParamField path="config_path" type="string">
+  Path to a `.sqlfluff` configuration file. Used only when `config` is not provided. Local config files in the working directory are not automatically loaded when using the simple API.
+</ParamField>
+
+### Return value
+
+Returns `list[dict[str, Any]]`. Each dict in the list represents one violation:
+
+<ResponseField name="code" type="string" required>
+  The rule code that was violated, e.g. `"CP01"`.
+</ResponseField>
+
+<ResponseField name="start_line_no" type="number" required>
+  The 1-indexed line number where the violation starts.
+</ResponseField>
+
+<ResponseField name="start_line_pos" type="number" required>
+  The 1-indexed column position where the violation starts.
+</ResponseField>
+
+<ResponseField name="description" type="string" required>
+  A human-readable description of the violation.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The rule name in dotted format, e.g. `"capitalisation.keywords"`.
+</ResponseField>
+
+<ResponseField name="warning" type="boolean">
+  Whether the violation is a warning rather than an error.
+</ResponseField>
+
+<ResponseField name="fixes" type="array">
+  List of fix objects (for linting violations). May be empty if the rule does not provide auto-fixes.
+</ResponseField>
+
+### Example
+
+```python
+import sqlfluff
+
+sql = "SeLEct  *, 1, blah as  fOO  from mySchema.myTable"
+
+violations = sqlfluff.lint(sql, dialect="bigquery")
+# [
+#   {'code': 'CP01', 'start_line_no': 1, 'start_line_pos': 1,
+#    'description': 'Keywords must be consistently upper case.',
+#    'name': 'capitalisation.keywords', 'warning': False, 'fixes': []},
+#   ...
+# ]
+
+# Lint for specific rules only
+violations = sqlfluff.lint(sql, rules=["CP01", "LT01"])
+
+# Exclude specific rules
+violations = sqlfluff.lint(sql, dialect="ansi", exclude_rules=["AL07"])
+```
+
+---
+
+## `sqlfluff.fix()`
+
+Fix a SQL string and return the corrected SQL.
+
+```python
+def fix(
+    sql: str,
+    dialect: Optional[str] = None,
+    rules: Optional[list[str]] = None,
+    exclude_rules: Optional[list[str]] = None,
+    config: Optional[FluffConfig] = None,
+    config_path: Optional[str] = None,
+    fix_even_unparsable: Optional[bool] = None,
+) -> str: ...
+```
+
+### Parameters
+
+<ParamField path="sql" type="string" required>
+  The SQL string to fix.
+</ParamField>
+
+<ParamField path="dialect" type="string" default="ansi">
+  The SQL dialect to use.
+</ParamField>
+
+<ParamField path="rules" type="string[]">
+  A subset of rule codes to fix for. If omitted, all fixable rules are applied.
+</ParamField>
+
+<ParamField path="exclude_rules" type="string[]">
+  A subset of rule codes to skip when fixing.
+</ParamField>
+
+<ParamField path="config" type="FluffConfig">
+  A pre-built `FluffConfig` object. When provided, `dialect`, `rules`, `exclude_rules`, and `config_path` are ignored.
+</ParamField>
+
+<ParamField path="config_path" type="string">
+  Path to a `.sqlfluff` configuration file. Used only when `config` is not provided.
+</ParamField>
+
+<ParamField path="fix_even_unparsable" type="boolean">
+  When `True`, attempt fixes even if the SQL could not be fully parsed. Overrides the corresponding configuration value. Defaults to `None` (use config file value, which defaults to `False`).
+</ParamField>
+
+### Return value
+
+Returns `str` — the fixed SQL string. If the SQL has parse errors and `fix_even_unparsable` is `False` (the default), the original SQL is returned unchanged.
+
+### Example
+
+```python
+import sqlfluff
+
+sql = "SeLEct  *, 1, blah as  fOO  from mySchema.myTable"
+
+# Fix all violations
+fixed = sqlfluff.fix(sql, dialect="bigquery")
+# 'SELECT *, 1, blah AS foo FROM myschema.mytable\n'
+
+# Fix only capitalisation rules
+fixed = sqlfluff.fix(sql, rules=["CP01"])
+# 'SELECT  *, 1, blah AS  fOO  FROM mySchema.myTable'
+
+# Fix multiple specific rules
+fixed = sqlfluff.fix(sql, rules=["CP01", "CP02"])
+# 'SELECT  *, 1, blah AS  fOO  FROM myschema.mytable'
+```
+
+---
+
+## `sqlfluff.parse()`
+
+Parse a SQL string and return a dict representing the parse tree.
+
+```python
+def parse(
+    sql: str,
+    dialect: Optional[str] = None,
+    config: Optional[FluffConfig] = None,
+    config_path: Optional[str] = None,
+) -> dict[str, Any]: ...
+```
+
+### Parameters
+
+<ParamField path="sql" type="string" required>
+  The SQL string to parse.
+</ParamField>
+
+<ParamField path="dialect" type="string" default="ansi">
+  The SQL dialect to use.
+</ParamField>
+
+<ParamField path="config" type="FluffConfig">
+  A pre-built `FluffConfig` object.
+</ParamField>
+
+<ParamField path="config_path" type="string">
+  Path to a `.sqlfluff` configuration file. Used only when `config` is not provided.
+</ParamField>
+
+### Return value
+
+Returns `dict[str, Any]` — a JSON-serialisable representation of the parse tree. The top-level key is `"file"`, whose value is a nested structure of segment types.
+
+<Note>
+When the input SQL has multiple variants (e.g. due to templating), only the first variant is returned. Use the advanced API with `Linter.parse_string()` for access to all variants.
+</Note>
+
+### Raises
+
+<ResponseField name="APIParsingError" type="ValueError">
+  Raised when the SQL string cannot be parsed. Contains a `violations` attribute listing all parse errors found.
+</ResponseField>
+
+### Example
+
+```python
+import sqlfluff
+from typing import Any, Iterator, Union
+
+sql = "SeLEct  *, 1, blah as  fOO  from mySchema.myTable"
+
+parse_result = sqlfluff.parse(sql)
+# {'file': {'statement': {...}, 'newline': '\n'}}
+
+# Recursively search the parse tree for a segment type
+def get_json_segment(
+    parse_result: dict[str, Any], segment_type: str
+) -> Iterator[Union[str, dict[str, Any], list[dict[str, Any]]]]:
+    for k, v in parse_result.items():
+        if k == segment_type:
+            yield v
+        elif isinstance(v, dict):
+            yield from get_json_segment(v, segment_type)
+        elif isinstance(v, list):
+            for s in v:
+                yield from get_json_segment(s, segment_type)
+
+# Retrieve all table references
+table_references = list(get_json_segment(parse_result, "table_reference"))
+# [[{'identifier': 'mySchema'}, {'dot': '.'}, {'identifier': 'myTable'}]]
+```
+
+---
+
+## `APIParsingError`
+
+```python
+from sqlfluff import APIParsingError
+```
+
+`APIParsingError` is raised by `parse()` when the SQL string contains syntax that cannot be parsed. It is a subclass of `ValueError`.
+
+### Attributes
+
+<ResponseField name="violations" type="list[SQLBaseError]">
+  A list of parse error objects describing each problem found.
+</ResponseField>
+
+### Example
+
+```python
+import sqlfluff
+from sqlfluff import APIParsingError
+
+try:
+    result = sqlfluff.parse("SELECT FROM WHERE", dialect="ansi")
+except APIParsingError as e:
+    print(f"Parse failed with {len(e.violations)} error(s):")
+    for violation in e.violations:
+        print(f"  {violation}")
+```
+
+---
+
+## Configuring the simple API
+
+The simple API can be configured in three ways, in order of increasing control:
+
+<Steps>
+  <Step title="Keyword arguments">
+    Pass `dialect`, `rules`, or `exclude_rules` directly to each function call.
+
+    ```python
+    sqlfluff.lint("SELECT 1", dialect="postgres", rules=["LT01"])
+    ```
+  </Step>
+  <Step title="Config file path">
+    Pass a path to a `.sqlfluff` configuration file via `config_path`.
+
+    ```python
+    sqlfluff.fix("SELECT  1", config_path="path/to/.sqlfluff")
+    ```
+  </Step>
+  <Step title="FluffConfig object">
+    Build a `FluffConfig` and pass it as `config`. This gives the most control and is the recommended approach for reuse across multiple calls.
+
+    ```python
+    from sqlfluff.core import FluffConfig
+    import sqlfluff
+
+    config = FluffConfig.from_kwargs(dialect="bigquery", rules=["LT01"])
+    sqlfluff.lint("SELECT 1", config=config)
+    sqlfluff.fix("SELECT  1", config=config)
+    ```
+  </Step>
+</Steps>
+
+See the [advanced API](/reference/api-advanced) for full details on building `FluffConfig` objects.
+
+---
+
+## `sqlfluff.list_rules()`
+
+Return a list of all available rules.
+
+```python
+from sqlfluff import list_rules
+
+rules = list_rules()
+# Returns list[RuleTuple] — each with .code, .name, .description
+for rule in rules:
+    print(rule.code, rule.name)
+```
+
+---
+
+## `sqlfluff.list_dialects()`
+
+Return a list of all available SQL dialects.
+
+```python
+from sqlfluff import list_dialects
+
+dialects = list_dialects()
+# Returns list[DialectTuple] — each with .label, .name, .inherits_from, .file_extension
+for dialect in dialects:
+    print(dialect.label)
+```

@@ -1,0 +1,206 @@
+---
+title: "dbt Templating"
+description: "Use the dbt templater plugin to lint dbt models with full macro support via dbt's own compilation engine."
+---
+
+The dbt templater integrates SQLFluff directly with a dbt project, compiling models through dbt's own Jinja environment. This gives full macro support at the cost of additional complexity compared to the default Jinja templater.
+
+## Choosing between dbt and Jinja templaters
+
+<CardGroup cols={2}>
+  <Card title="Use dbt templater" icon="circle-check">
+    You are running SQLFluff in CI/CD where accuracy of SQL rendering matters more than speed. Most or all dbt macros — including third-party ones — will resolve correctly.
+  </Card>
+  <Card title="Use Jinja templater" icon="bolt">
+    You are running SQLFluff in an IDE or git hook where response speed is important. Simpler to configure and faster to run.
+  </Card>
+</CardGroup>
+
+### Pros and cons
+
+<AccordionGroup>
+  <Accordion title="Pros of the dbt templater">
+    - Most (potentially all) macros will work, including third-party packages
+    - Renders SQL exactly as dbt would in production
+  </Accordion>
+  <Accordion title="Cons of the dbt templater">
+    - More complex to configure — may require understanding of your models and macros
+    - Best practices are not yet fully established or documented
+    - If your dbt models access a database at compile time, SQLFluff will also require database access (though you can point it at a test database)
+    - Runs slower than the Jinja templater
+  </Accordion>
+</AccordionGroup>
+
+## Installation
+
+Install the dbt adapter for your database and the SQLFluff dbt plugin:
+
+<Tabs>
+  <Tab title="PostgreSQL">
+    ```bash
+    pip install dbt-postgres sqlfluff-templater-dbt
+    ```
+  </Tab>
+  <Tab title="BigQuery">
+    ```bash
+    pip install dbt-bigquery sqlfluff-templater-dbt
+    ```
+  </Tab>
+  <Tab title="Snowflake">
+    ```bash
+    pip install dbt-snowflake sqlfluff-templater-dbt
+    ```
+  </Tab>
+  <Tab title="Other adapters">
+    ```bash
+    pip install dbt-<adapter> sqlfluff-templater-dbt
+    ```
+    See the [dbt available adapters](https://docs.getdbt.com/docs/available-adapters) for the full list.
+  </Tab>
+</Tabs>
+
+## Configuration
+
+### `.sqlfluff`
+
+```cfg .sqlfluff
+[sqlfluff]
+templater = dbt
+```
+
+### `.sqlfluffignore`
+
+Exclude dbt-generated directories that should not be linted:
+
+```text .sqlfluffignore
+dbt_packages/
+macros/
+target/
+```
+
+### dbt project settings
+
+Configure the dbt project directory, profiles directory, profile, and target:
+
+```cfg .sqlfluff
+[sqlfluff:templater:dbt]
+project_dir = <relative or absolute path to dbt_project directory>
+profiles_dir = <relative or absolute path to directory containing profiles.yml>
+profile = <dbt profile name>
+target = <dbt target name>
+dbt_skip_compilation_error = True
+```
+
+<Note>
+  `project_dir` can be overridden by the `DBT_PROJECT_DIR` environment variable. `profiles_dir` can be overridden by `DBT_PROFILES_DIR`.
+</Note>
+
+<Note>
+  If `profiles_dir` is omitted, SQLFluff uses dbt's default profile location. On Linux and macOS this is `~/.dbt/`. On Windows, run `dbt debug --config-dir` to find your default profile directory.
+</Note>
+
+### Compilation errors
+
+A fatal compile-time error can occur if a macro queries a table at compile time that doesn't exist. By default `dbt_skip_compilation_error` is `True`, so such errors are silently skipped. Set it to `False` to surface these errors as fatal failures:
+
+```cfg .sqlfluff
+[sqlfluff:templater:dbt]
+dbt_skip_compilation_error = False
+```
+
+## Passing variables to dbt
+
+Pass dbt variables via the `[sqlfluff:templater:dbt:context]` section. This is equivalent to using `--vars` on the dbt command line:
+
+<CodeGroup>
+
+```cfg .sqlfluff
+[sqlfluff:templater:dbt:context]
+my_variable = 1
+```
+
+```bash dbt equivalent
+dbt run --vars '{"my_variable": 1}'
+```
+
+</CodeGroup>
+
+## Using dbt builtins with the Jinja templater
+
+If you prefer the Jinja templater but need access to dbt builtins like `ref`, `var`, and `is_incremental()`, enable them with:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+```
+
+You can also customise the built-in dbt macro definitions in the config:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja:macros]
+dbt_ref = {% macro ref(model_ref) %}{{model_ref}}{% endmacro %}
+dbt_source = {% macro source(source_name, table) %}{{source_name}}_{{table}}{% endmacro %}
+dbt_config = {% macro config() %}{% for k in kwargs %}{% endfor %}{% endmacro %}
+dbt_var = {% macro var(variable, default='') %}item{% endmacro %}
+dbt_is_incremental = {% macro is_incremental() %}True{% endmacro %}
+```
+
+## Linting dbt models
+
+Once configured, run SQLFluff against your dbt models directory as usual:
+
+```bash
+# Lint all models
+sqlfluff lint models/
+
+# Lint a specific model
+sqlfluff lint models/marts/orders.sql
+
+# Fix issues automatically
+sqlfluff fix models/
+```
+
+## Using SQLFluff with dbt in CI
+
+A typical CI setup for a dbt project:
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    pip install dbt-<adapter> sqlfluff-templater-dbt
+    ```
+  </Step>
+  <Step title="Configure SQLFluff">
+    Add a `.sqlfluff` file to your project root:
+
+    ```cfg .sqlfluff
+    [sqlfluff]
+    templater = dbt
+    dialect = postgres
+
+    [sqlfluff:templater:dbt]
+    project_dir = .
+    profiles_dir = .
+    profile = my_project
+    target = ci
+    ```
+  </Step>
+  <Step title="Add a CI profiles file">
+    Provide a `profiles.yml` in the project root (or use environment variables) that points at a CI or test database rather than production.
+  </Step>
+  <Step title="Run linting">
+    ```bash
+    sqlfluff lint models/
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  Point the dbt templater at a test or development database for CI. It does not have to be the production database.
+</Tip>
+
+## Known caveats
+
+<Warning>
+  The `templater = dbt` setting must be placed in the `.sqlfluff` config file in the directory where SQLFluff is run. The templater cannot be overridden by `.sqlfluff` files in subdirectories.
+</Warning>

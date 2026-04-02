@@ -1,0 +1,147 @@
+---
+title: "GitHub Actions"
+description: "Run SQLFluff in GitHub Actions to lint SQL files and annotate pull requests with violations automatically."
+---
+
+GitHub Actions lets you run SQLFluff on every push or pull request and surface violations directly as PR annotations, so reviewers can see exactly which lines need attention.
+
+SQLFluff supports two annotation output formats for GitHub:
+
+<CardGroup cols={2}>
+  <Card title="github-annotation-native" icon="code-branch">
+    Emits GitHub workflow commands that GitHub converts into annotations natively — no extra action required.
+  </Card>
+  <Card title="github-annotation" icon="github">
+    Produces a JSON file compatible with the yuzutech annotations-action, which uses the GitHub API to post annotations. Not subject to GitHub's 10-annotation limit.
+  </Card>
+</CardGroup>
+
+<Warning>
+  GitHub currently limits `github-annotation-native` output to displaying only the first 10 annotations per workflow run. For pull requests with many violations, use the `github-annotation` format together with the yuzutech action instead. You can track the [open feature request](https://github.com/orgs/community/discussions/68471) on GitHub.
+</Warning>
+
+## Complete workflow example
+
+The workflow below lints all SQL files on every pull request and posts annotations using the yuzutech action. It caches pip dependencies to speed up subsequent runs.
+
+```yaml .github/workflows/sqlfluff.yml
+name: SQLFluff
+
+on:
+  pull_request:
+    paths:
+      - '**/*.sql'
+
+jobs:
+  lint:
+    name: Lint SQL
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-sqlfluff-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-sqlfluff-
+
+      - name: Install SQLFluff
+        run: pip install sqlfluff
+
+      - name: Run SQLFluff and write annotations file
+        run: |
+          sqlfluff lint . \
+            --dialect ansi \
+            --format github-annotation \
+            --write-output annotations.json \
+            --processes -1 \
+          || true
+        # '|| true' prevents the step from failing so the annotation step still runs.
+        # The annotations-action will surface violations in the PR.
+
+      - name: Annotate pull request
+        uses: yuzutech/annotations-action@v0.5.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          input: annotations.json
+```
+
+<Note>
+  The `|| true` at the end of the `sqlfluff lint` command ensures the workflow continues to the annotation step even when violations are found. If you want the workflow to fail when violations are present, remove `|| true` — but make sure the annotation step uses `if: always()` so annotations are still posted.
+</Note>
+
+## Using github-annotation-native (no extra action)
+
+If you prefer not to use the yuzutech action and are willing to accept the 10-annotation limit, use the `github-annotation-native` format:
+
+```yaml .github/workflows/sqlfluff-native.yml
+name: SQLFluff (native annotations)
+
+on: [pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install SQLFluff
+        run: pip install sqlfluff
+
+      - name: Lint SQL files
+        run: sqlfluff lint . --dialect ansi --format github-annotation-native
+```
+
+GitHub reads the workflow command output and converts it into PR annotations automatically — no additional step required.
+
+## Caching pip dependencies
+
+Caching speeds up the workflow by reusing previously downloaded packages. The example above uses `actions/cache` keyed on the contents of any `requirements*.txt` files. If you pin SQLFluff in a requirements file, the cache is invalidated automatically when you upgrade.
+
+```yaml
+- name: Cache pip dependencies
+  uses: actions/cache@v4
+  with:
+    path: ~/.cache/pip
+    key: ${{ runner.os }}-pip-sqlfluff-${{ hashFiles('**/requirements*.txt') }}
+    restore-keys: |
+      ${{ runner.os }}-pip-sqlfluff-
+```
+
+If you are not using a requirements file, key the cache on the SQLFluff version string instead:
+
+```yaml
+key: ${{ runner.os }}-pip-sqlfluff-3.3.1
+```
+
+## More examples
+
+For additional workflow examples — including dbt projects, matrix builds across multiple dialects, and using SQLFluff as a status check — see the [sqlfluff-github-actions repository](https://github.com/sqlfluff/sqlfluff-github-actions).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="CI/CD integration" icon="circle-check" href="/production/ci-cd">
+    Exit codes, output formats, diff-quality, and security notes for all CI systems.
+  </Card>
+  <Card title="Pre-commit hooks" icon="git-alt" href="/production/pre-commit">
+    Block commits that contain SQL violations before they are pushed.
+  </Card>
+</CardGroup>

@@ -1,23 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "SQLFluff",
+  "projectType": "cli-tool",
+  "projectName": "SQLFluff",
+  "projectDescription": "A dialect-flexible SQL linter and auto-formatter with support for 25+ SQL dialects, Jinja/dbt templating, and a powerful rule engine.",
   "theme": "palm",
-  "colors": {
-    "primary": "#646464",
-    "light": "#bebebe"
-  },
-  "favicon": "https://media.brand.dev/a61ce7f8-b9e0-4ee4-ae1a-3ce67e0b5c79.jpg",
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/sqlfluff/sqlfluff"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/sqlfluff/sqlfluff"
-    }
-  },
+  "primaryColor": "#646464",
+  "lightColor": "#bebebe",
+  "darkColor": null,
   "navigation": {
     "tabs": [
       {
@@ -105,5 +93,32 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "SQL linting with 25+ dialect support (BigQuery, Snowflake, dbt, PostgreSQL, T-SQL, etc.)",
+    "Auto-fix mode to automatically correct most linting violations",
+    "Jinja and dbt templating support for modern ELT pipelines",
+    "Highly configurable rule engine with per-rule and per-dialect overrides",
+    "Python API for programmatic SQL linting and parsing",
+    "CLI with lint, fix, parse, format, and render commands",
+    "Pre-commit hook and CI/CD integration support",
+    "Plugin system for custom rules and templaters"
+  ],
+  "publicApiSurface": [
+    "sqlfluff lint <path>",
+    "sqlfluff fix <path>",
+    "sqlfluff parse <path>",
+    "sqlfluff format <path>",
+    "sqlfluff render <path>",
+    "sqlfluff dialects",
+    "sqlfluff rules",
+    "sqlfluff.api.lint(sql, dialect, rules)",
+    "sqlfluff.api.fix(sql, dialect, rules)",
+    "sqlfluff.api.parse(sql, dialect)",
+    "FluffConfig.from_root(overrides)",
+    "Linter(config)",
+    "Rule_AL01 (aliasing rules)",
+    "Rule_LT01 (layout rules)",
+    "Rule_CV01 (convention rules)"
+  ]
 }

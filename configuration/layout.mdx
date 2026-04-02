@@ -1,0 +1,380 @@
+---
+title: "Layout and Formatting Configuration"
+description: "Configure indentation, line length, spacing, comma position, and line breaks in SQLFluff."
+---
+
+Layout configuration in SQLFluff controls three key aspects of whitespace: **spacing** (whitespace between elements on the same line), **line breaks** (where newlines are placed), and **indentation** (how much whitespace precedes the first element on a line).
+
+SQLFluff is opinionated on these themes but fully configurable. The defaults follow the [dbt Labs SQL style guide](https://github.com/dbt-labs/corp/blob/main/dbt_style_guide.md).
+
+<Note>
+Layout config is spread across three places: the parser (indent/dedent token placement), the `[sqlfluff:layout]` config section (spacing and line position), and individual rules for specific cases.
+</Note>
+
+## Indentation settings
+
+Indentation is configured in the `[sqlfluff:indentation]` section.
+
+### Basic indent settings
+
+```cfg
+[sqlfluff:indentation]
+indent_unit = space
+tab_space_size = 4
+```
+
+| Setting | Default | Description |
+|---|---|---|
+| `indent_unit` | `space` | Use `space` or `tab` as the indent character |
+| `tab_space_size` | `4` | Number of spaces per indent level (or tab width) |
+
+### JOIN indentation
+
+By default, SQLFluff does **not** indent `JOIN` expressions relative to `FROM`, following most common style guides:
+
+```sql
+SELECT
+   a,
+   b
+FROM my_table
+JOIN another_table
+   ON
+      condition1
+      AND condition2
+```
+
+To indent `JOIN` expressions:
+
+```cfg
+[sqlfluff:indentation]
+indented_joins = True
+```
+
+```sql
+SELECT
+   a,
+   b
+FROM my_table
+   JOIN another_table
+      ON
+         condition1
+         AND condition2
+```
+
+### ON / USING indentation
+
+`indented_using_on` (default `True`) controls whether the `ON` or `USING` clause is indented under `JOIN`:
+
+```cfg
+[sqlfluff:indentation]
+indented_using_on = False
+```
+
+Combine with `implicit_indents = allow` for a compact style:
+
+```cfg
+[sqlfluff:indentation]
+indented_using_on = False
+implicit_indents = allow
+```
+
+```sql
+SELECT
+   a,
+   b
+FROM my_table
+JOIN another_table
+ON condition1
+   AND condition2
+```
+
+### CTE indentation
+
+To indent CTEs within the `WITH` clause:
+
+```cfg
+[sqlfluff:indentation]
+indented_ctes = True
+```
+
+```sql
+WITH
+   some_cte AS (
+      SELECT 1 FROM table1
+   ),
+
+   some_other_cte AS (
+      SELECT 1 FROM table1
+   )
+
+SELECT 1 FROM some_cte
+```
+
+### Implicit indents
+
+Implicit indents allow a more compact layout for clauses of the form `KEYWORD <expression>` (such as `WHERE`), where the indent is "taken" without a newline:
+
+```cfg
+[sqlfluff:indentation]
+implicit_indents = allow
+```
+
+```sql
+-- With implicit_indents = allow
+SELECT *
+FROM my_table
+WHERE condition_a
+   AND condition_b;
+
+-- With implicit_indents = forbid (default)
+SELECT *
+FROM my_table
+WHERE
+   condition_a
+   AND condition_b;
+```
+
+The `implicit_indents` option accepts `forbid` (default), `allow`, or `require`. When using `require`, you can exclude specific elements:
+
+```cfg
+[sqlfluff:indentation]
+implicit_indents = require
+skip_implicit_indents_in = case_expression
+```
+
+### Template block indentation
+
+Controls whether Jinja/templated blocks introduce indentation:
+
+```cfg
+[sqlfluff:indentation]
+template_blocks_indent = True
+```
+
+### Trailing comment placement
+
+When a comment is found at the end of a long line, SQLFluff moves it. The `trailing_comments` setting controls where:
+
+```cfg
+[sqlfluff:indentation]
+trailing_comments = before
+```
+
+Set to `after` to move trailing comments after the current line instead.
+
+## Line length
+
+```cfg
+[sqlfluff]
+max_line_length = 80
+```
+
+The default of 80 characters follows the dbt Labs SQL style guide. Set to `0` or a negative value to disable line length checks.
+
+Per-rule options are available for ignoring comment lines or comment clauses:
+
+```cfg
+[sqlfluff:rules:layout.long_lines]
+ignore_comment_lines = False
+ignore_comment_clauses = False
+```
+
+## Blank line limits
+
+Control blank lines between and inside statements:
+
+```cfg
+[sqlfluff:rules:layout.newlines]
+maximum_empty_lines_between_statements = 2
+maximum_empty_lines_inside_statements = 1
+maximum_empty_lines_between_batches = 1
+```
+
+## Spacing and line break configuration
+
+The `[sqlfluff:layout:type:<type>]` section controls spacing and line break behavior for specific element types. The type name corresponds to the dialect's segment type.
+
+### Spacing options
+
+Each layout type section can set `spacing_before`, `spacing_after`, and `spacing_within`:
+
+| Value | Meaning |
+|---|---|
+| `single` | Default — one space unless a newline is present |
+| `touch` | No space if on the same line; newlines are allowed |
+| `touch:inline` | No space, and newlines are not allowed |
+| `any` | No constraint on spacing |
+
+### Line position options
+
+The `line_position` option controls where line breaks fall relative to an element:
+
+| Value | Meaning |
+|---|---|
+| `trailing` | Line break (if any) comes after the element |
+| `leading` | Line break (if any) comes before the element |
+| `alone` | If a line break is on either side, both sides must have one |
+| `alone:strict` | Always force line breaks on both sides |
+
+### Default layout configuration
+
+The default config establishes these element type layouts:
+
+```cfg
+[sqlfluff:layout:type:comma]
+spacing_before = touch
+line_position = trailing
+
+[sqlfluff:layout:type:binary_operator]
+spacing_within = touch
+line_position = leading
+
+[sqlfluff:layout:type:statement_terminator]
+spacing_before = touch
+line_position = trailing
+
+[sqlfluff:layout:type:set_operator]
+line_position = alone:strict
+
+[sqlfluff:layout:type:select_clause]
+line_position = alone
+
+[sqlfluff:layout:type:where_clause]
+line_position = alone
+keyword_line_position = leading
+
+[sqlfluff:layout:type:from_clause]
+line_position = alone
+
+[sqlfluff:layout:type:join_clause]
+line_position = alone
+
+[sqlfluff:layout:type:groupby_clause]
+line_position = alone
+keyword_line_position = leading
+
+[sqlfluff:layout:type:orderby_clause]
+line_position = leading
+keyword_line_position = leading
+
+[sqlfluff:layout:type:having_clause]
+line_position = alone
+keyword_line_position = leading
+```
+
+## Common layout customizations
+
+### Leading commas
+
+To switch from trailing commas (default) to leading commas:
+
+```cfg
+[sqlfluff:layout:type:comma]
+line_position = leading
+```
+
+```sql
+SELECT
+   col_a
+   , col_b
+   , col_c
+FROM tbl_a
+```
+
+### Aligned aliases
+
+To align alias expressions within a select clause:
+
+```cfg
+[sqlfluff:layout:type:alias_expression]
+spacing_before = align
+align_within = select_clause
+align_scope = bracketed
+```
+
+```sql
+SELECT
+   a           AS first_column,
+   b           AS second_column,
+   (a + b) / 2 AS third_column
+FROM foo AS bar
+```
+
+The `align_scope` value controls how far SQLFluff searches to find siblings to align:
+
+| `align_scope` | Meaning |
+|---|---|
+| `bracketed` | Stops at bracket boundaries (e.g., CTE subqueries) |
+| `statement` | Aligns across the full statement including FROM aliases |
+| `file` | Aligns across the entire file |
+
+### WHERE clause keyword position
+
+To force `WHERE` keyword onto its own line:
+
+```cfg
+[sqlfluff:layout:type:where_clause]
+line_position = alone
+keyword_line_position = alone
+```
+
+```sql
+SELECT
+     a
+FROM t
+WHERE
+     b = 1
+     AND c = 2
+```
+
+### Unsetting keyword line position defaults
+
+To clear the default `keyword_line_position` for certain clauses:
+
+```cfg
+[sqlfluff:layout:type:where_clause]
+keyword_line_position = none
+
+[sqlfluff:layout:type:orderby_clause]
+keyword_line_position = none
+
+[sqlfluff:layout:type:groupby_clause]
+keyword_line_position = none
+
+[sqlfluff:layout:type:having_clause]
+keyword_line_position = none
+```
+
+## Complete example: common layout preferences
+
+```cfg
+[sqlfluff]
+max_line_length = 120
+
+[sqlfluff:indentation]
+indent_unit = space
+tab_space_size = 4
+indented_joins = False
+indented_ctes = False
+indented_using_on = True
+implicit_indents = allow
+
+[sqlfluff:layout:type:comma]
+spacing_before = touch
+line_position = trailing
+
+[sqlfluff:layout:type:binary_operator]
+spacing_within = touch
+line_position = leading
+
+[sqlfluff:layout:type:set_operator]
+line_position = alone:strict
+
+[sqlfluff:rules:layout.long_lines]
+ignore_comment_lines = False
+ignore_comment_clauses = False
+
+[sqlfluff:rules:layout.newlines]
+maximum_empty_lines_between_statements = 2
+maximum_empty_lines_inside_statements = 1
+```

@@ -1,0 +1,200 @@
+---
+title: "Rule Configuration"
+description: "How to enable, disable, and fine-tune SQLFluff rules globally, per-rule, and per-path."
+---
+
+Rules can be configured through `.sqlfluff` config files, `pyproject.toml`, or inline comment directives. SQLFluff applies rule decisions on a file-by-file basis using the effective configuration for that file.
+
+## Shared rule settings
+
+Common rule configurations are set in the `[sqlfluff:rules]` section and apply across multiple rules:
+
+```cfg
+[sqlfluff:rules]
+allow_scalar = True
+single_table_references = consistent
+unquoted_identifiers_policy = all
+```
+
+## Per-rule configuration
+
+Rule-specific configuration is set in a subsection named after the rule. For example, to enforce uppercase keywords using rule `CP01`:
+
+```cfg
+[sqlfluff:rules:capitalisation.keywords]
+# Keywords
+capitalisation_policy = upper
+```
+
+Other common per-rule sections from the default config:
+
+```cfg
+[sqlfluff:rules:capitalisation.identifiers]
+extended_capitalisation_policy = consistent
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = consistent
+
+[sqlfluff:rules:aliasing.table]
+aliasing = explicit
+
+[sqlfluff:rules:aliasing.column]
+aliasing = explicit
+
+[sqlfluff:rules:convention.not_equal]
+preferred_not_equal_style = consistent
+
+[sqlfluff:rules:convention.select_trailing_comma]
+select_clause_trailing_comma = forbid
+
+[sqlfluff:rules:structure.subquery]
+forbid_subquery_in = join
+```
+
+All available options for each rule section are documented in the [rules reference](https://docs.sqlfluff.com/en/stable/reference/rules.html).
+
+## Enabling and disabling rules
+
+Two configuration values control which rules are applied to a given file:
+
+- **`rules`** — explicitly enables the specified rules. If unset or empty, all rules are enabled.
+- **`exclude_rules`** — explicitly disables the specified rules. Applied *after* `rules`, so it subtracts from the enabled set.
+
+Each value accepts a comma-separated list of **references**. A reference can be any of:
+
+| Reference type | Example |
+|---|---|
+| Rule code | `LN01` |
+| Rule name | `layout.indent` |
+| Rule alias (often a deprecated code) | `L003` |
+| Rule group | `layout`, `capitalisation` |
+
+These reference types can be mixed in a single expression.
+
+### Disable specific rules
+
+```cfg
+[sqlfluff]
+exclude_rules = LT08, RF02
+```
+
+### Enable only specific rules
+
+```cfg
+[sqlfluff]
+rules = RF02
+```
+
+### Enable rules by group
+
+```cfg
+[sqlfluff]
+rules = core
+```
+
+This enables the curated set of "core rules" — a subset considered most broadly applicable.
+
+<Note>
+When using nested config files, `rules` and `exclude_rules` **totally overwrite** any values from parent config files — they do not merge. The subtraction between `rules` and `exclude_rules` is computed per file.
+</Note>
+
+### Recommended approaches for complex projects
+
+When managing nested configs across a large project, choose one of these patterns:
+
+<Tabs>
+  <Tab title="Explicit rules per area">
+    Use only `rules` in every config file. Each area of the project is fully explicit about which rules are active. When the rule set changes for a sub-area, reset the whole list.
+
+    ```cfg
+    # project root
+    [sqlfluff]
+    rules = all
+
+    # project/finance/.sqlfluff
+    [sqlfluff]
+    rules = CP01, LT01, AL01
+    ```
+  </Tab>
+  <Tab title="Exclude by exception">
+    Set a single `rules` value in the root config. In subdirectory configs, use only `exclude_rules` to turn off rules that don't apply to that area.
+
+    ```cfg
+    # project root
+    [sqlfluff]
+    rules = all
+
+    # project/legacy/.sqlfluff
+    [sqlfluff]
+    exclude_rules = CP01, AL01
+    ```
+  </Tab>
+</Tabs>
+
+## Downgrading rules to warnings
+
+Rules can be downgraded to *warnings* so that violations are displayed but do not cause the run to fail. This is useful when introducing new rules incrementally.
+
+```cfg
+[sqlfluff]
+warnings = LT01, LT04
+```
+
+With this configuration, files with only warning-level violations will pass, while files with other violations will fail:
+
+```
+== [test.sql] PASS
+L:   2 | P:   9 | LT01 | WARNING: Missing whitespace before +
+
+== [test2.sql] FAIL
+L:   2 | P:   8 | CP02 | Unquoted identifiers must be consistently upper case.
+L:   2 | P:  11 | LT01 | WARNING: Missing whitespace before +
+```
+
+You can use either a rule code or rule name in the `warnings` setting.
+
+## Force-enabling rules
+
+Some rules are disabled by default for certain dialects. These rules expose a `force_enable` option that allows you to turn them on regardless:
+
+```cfg
+[sqlfluff:rules:aliasing.forbid]
+force_enable = True
+```
+
+Check the [rules reference](https://docs.sqlfluff.com/en/stable/reference/rules.html) to see which rules support `force_enable`.
+
+## Per-path rule configuration
+
+Because SQLFluff [cascades config files](/configuration/overview#configuration-hierarchy-and-cascading) from directories, you can place a `.sqlfluff` file in any subdirectory to override rules for that path:
+
+```
+project/
+├── .sqlfluff          # root config: rules = all
+├── src/
+│   └── .sqlfluff      # override: exclude_rules = CP01
+└── legacy/
+    └── .sqlfluff      # override: exclude_rules = CP01, AL01, LT08
+```
+
+## Inline `noqa` comments
+
+Individual lines can be suppressed using `-- noqa` at the end of the line. See [Ignoring Files and Violations](/configuration/ignoring) for full details.
+
+```sql
+-- Ignore all violations on this line
+SeLeCt  1 from tBl ;    -- noqa
+
+-- Ignore only specific rules
+SeLeCt  1 from tBl ;    -- noqa: CP02,CP03
+```
+
+## Layout and spacing configuration
+
+The `[sqlfluff:layout]` section controls spacing and line break behavior across all rules. See [Layout and Formatting Configuration](/configuration/layout) for full details.
+
+```cfg
+[sqlfluff:layout:type:comma]
+spacing_before = touch
+line_position = trailing
+```

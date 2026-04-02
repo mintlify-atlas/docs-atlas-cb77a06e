@@ -1,0 +1,363 @@
+---
+title: "Aliasing Rules (AL)"
+description: "Rules AL01–AL09 govern how tables and columns are aliased in SQL."
+---
+
+Aliasing rules enforce consistent and unambiguous use of aliases for tables and columns. They cover whether `AS` is required, uniqueness of aliases, whether aliases are actually used, and alias length constraints.
+
+---
+
+## AL01 — `aliasing.table`
+
+**Implicit/explicit aliasing of table.**
+
+Enforces whether table aliases must use an explicit `AS` keyword. By default, `AS` is required (explicit aliasing).
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        voo.a
+    FROM foo voo
+    ```
+
+    The alias `voo` is implicit — `AS` is missing.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        voo.a
+    FROM foo AS voo
+    ```
+
+    Add `AS` to make the alias explicit.
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:AL01]
+# Options: "explicit" (default) or "implicit"
+aliasing = explicit
+```
+
+<Note>
+AL01 is disabled for the Oracle dialect, which has different aliasing rules. Use AL02 for column aliasing.
+</Note>
+
+---
+
+## AL02 — `aliasing.column`
+
+**Implicit/explicit aliasing of columns.**
+
+Enforces whether column aliases must use an explicit `AS` keyword. By default, `AS` is required. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        a alias_col
+    FROM foo
+    ```
+
+    The column alias `alias_col` is implicit — `AS` is missing.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        a AS alias_col
+    FROM foo
+    ```
+
+    Add `AS` to make the alias explicit.
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:AL02]
+# Options: "explicit" (default) or "implicit"
+aliasing = explicit
+```
+
+---
+
+## AL03 — `aliasing.expression`
+
+**Column expression without alias.**
+
+Flags complex expressions in the `SELECT` clause that do not have an alias. Simple column references and wildcards are allowed without an alias. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        sum(a),
+        sum(b)
+    FROM foo
+    ```
+
+    Neither aggregate expression has an alias.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        sum(a) AS a_sum,
+        sum(b) AS b_sum
+    FROM foo
+    ```
+
+    Add aliases to expression columns.
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:AL03]
+# When true, a single complex expression without alias is allowed
+allow_scalar = true
+```
+
+---
+
+## AL04 — `aliasing.unique.table`
+
+**Table aliases should be unique within each clause.**
+
+Reusing the same table alias within a `SELECT` is almost always a coding error. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        t.a,
+        t.b
+    FROM foo AS t, bar AS t
+    ```
+
+    The alias `t` is used for two different tables.
+
+    ```sql
+    -- Also caught when implicit aliases collide
+    SELECT a, b
+    FROM 2020.foo, 2021.foo
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        f.a,
+        b.b
+    FROM foo AS f, bar AS b
+    ```
+
+    ```sql
+    SELECT f1.a, f2.b
+    FROM 2020.foo AS f1, 2021.foo AS f2
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## AL05 — `aliasing.unused`
+
+**Tables should not be aliased if that alias is not used.**
+
+An alias defined but never referenced makes the SQL harder to read without adding any functionality. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        a
+    FROM foo AS zoo
+    ```
+
+    The alias `zoo` is defined but `zoo` is never referenced.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    -- Either use the alias:
+    SELECT
+        zoo.a
+    FROM foo AS zoo
+
+    -- Or remove it:
+    SELECT
+        a
+    FROM foo
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:AL05]
+# How to compare alias names: "case_insensitive", "dialect", etc.
+alias_case_check = case_insensitive
+```
+
+---
+
+## AL06 — `aliasing.length`
+
+**Enforce table alias length constraints.**
+
+Flags aliases that are shorter than a configured minimum or longer than a configured maximum length. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    -- With min_alias_length = 3
+    SELECT
+        SUM(o.amount) AS order_amount
+    FROM orders AS o
+    ```
+
+    The alias `o` is only one character, below the minimum.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        SUM(orders.amount) AS order_amount
+    FROM orders
+
+    -- Or use a longer alias
+    SELECT
+        SUM(ord.amount) AS order_amount
+    FROM orders AS ord
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:AL06]
+# Minimum alias length (unset by default)
+min_alias_length = 3
+# Maximum alias length (unset by default)
+max_alias_length =
+```
+
+---
+
+## AL07 — `aliasing.forbid`
+
+**Avoid table aliases in from clauses and join conditions.**
+
+Prohibits all table aliases in `FROM` clauses and `JOIN` conditions. Derived from the dbt style guide. This rule is **disabled by default** for all dialects.
+
+<Warning>
+This is a stricter and more controversial rule than AL06. For most projects, AL06 (enforcing minimum alias length) is a more practical choice. AL07 is disabled by default and must be explicitly force-enabled.
+</Warning>
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        COUNT(o.customer_id) AS order_amount,
+        c.name
+    FROM orders AS o
+    JOIN customers AS c ON o.id = c.user_id
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        COUNT(orders.customer_id) AS order_amount,
+        customers.name
+    FROM orders
+    JOIN customers ON orders.id = customers.user_id
+    ```
+
+    Self-joins are excluded from this rule.
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:AL07]
+# Must be set to true to enable this rule
+force_enable = false
+```
+
+---
+
+## AL08 — `aliasing.unique.column`
+
+**Column aliases should be unique within each clause.**
+
+Reusing a column alias within the same `SELECT` clause is almost always a mistake. Comparisons are always case-insensitive. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        a AS foo,
+        b AS foo
+    FROM tbl;
+
+    -- Also caught:
+    SELECT
+        foo,
+        foo,
+        a AS foo
+    FROM tbl;
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        a AS foo,
+        b AS bar
+    FROM tbl;
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## AL09 — `aliasing.self_alias.column`
+
+**Column aliases should not alias a column to itself.**
+
+Self-aliasing (`col AS col`) is redundant and adds no value. This rule only applies when the alias and the column reference are identical (same casing and quoting). Re-casing aliases (e.g. `col AS "Col"`) are still allowed. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        col AS col,
+        "Col" AS "Col",
+        COL AS col
+    FROM table;
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        col,
+        "Col",
+        COL
+    FROM table;
+
+    -- Re-casing is still allowed where needed:
+    SELECT
+        col AS "Col",
+        "col" AS "COL"
+    FROM table;
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+AL09 works in conjunction with RF06 (references.quoting) and CP02 (capitalisation.identifiers). When those rules normalise quoting or casing, AL09 may flag additional self-aliases as a secondary effect.
+</Note>

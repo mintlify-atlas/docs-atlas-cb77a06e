@@ -1,0 +1,111 @@
+---
+title: "Introduction"
+description: "SQLFluff is a dialect-flexible SQL linter and auto-fixer for humans — supporting 25+ dialects, Jinja templating, and dbt."
+---
+
+SQLFluff is a dialect-flexible and configurable SQL linter. Designed with [ELT](https://www.techtarget.com/searchdatamanagement/definition/Extract-Load-Transform-ELT) applications in mind, SQLFluff also works with Jinja templating and dbt. SQLFluff will auto-fix most linting errors, allowing you to focus your time on what matters.
+
+As analytics transitions from one-off work to building stable and reusable infrastructure, the same engineering principles that power software quality — consistent style, automated checks, and code review — now apply to SQL. SQLFluff fills that role for SQL teams.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Install SQLFluff and lint your first SQL file in minutes.
+  </Card>
+  <Card title="GitHub" icon="github" href="https://github.com/sqlfluff/sqlfluff">
+    View the source, open issues, and contribute on GitHub.
+  </Card>
+</CardGroup>
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="25+ SQL dialects" icon="database" href="/dialects/supported">
+    ANSI, BigQuery, Snowflake, PostgreSQL, T-SQL, Redshift, DuckDB, Hive, SparkSQL, and many more.
+  </Card>
+  <Card title="Auto-fix violations" icon="wand-magic-sparkles" href="/reference/fix">
+    Automatically rewrite SQL to comply with configured rules — no manual editing required for most issues.
+  </Card>
+  <Card title="Templating support" icon="brackets-curly" href="/templating/overview">
+    Full support for Jinja2 templates, dbt models, Python format strings, and SQL placeholders.
+  </Card>
+  <Card title="Configurable rules" icon="list-check" href="/reference/rules-overview">
+    Enable, disable, and tune individual rules per dialect, directory, or file path using a simple INI-style config file.
+  </Card>
+  <Card title="Pre-commit and CI" icon="shield-check" href="/production/pre-commit">
+    Integrates with pre-commit hooks, GitHub Actions, and diff-quality to enforce standards on every commit.
+  </Card>
+  <Card title="Plugin system" icon="puzzle-piece" href="/reference/plugins">
+    Extend SQLFluff with custom rules and templaters using the plugin API.
+  </Card>
+</CardGroup>
+
+## Why SQLFluff?
+
+With larger and larger teams maintaining large bodies of SQL code, it becomes more and more important that code is not just _valid_ but also easily _comprehensible_ by other contributors. Linters enforce a consistent style and surface problems early — before they reach production.
+
+SQLFluff brings this discipline to SQL. It is built around three components:
+
+1. **Parser** — Lexes and parses SQL into a segment tree, handling dialect differences and whitespace precisely.
+2. **Linter** — Measures parsed SQL against a configurable set of rules, reporting violations with line numbers and rule codes.
+3. **Fixer** — Applies automated rewrites to resolve violations wherever possible.
+
+SQLFluff is opinionated but flexible. It ships with sensible defaults and an extensive rule set, while allowing any team to override defaults to match their existing conventions.
+
+## Supported dialects
+
+SQLFluff currently supports the following SQL dialects (though perhaps not all features of each):
+
+| Dialect | Notes |
+|---|---|
+| ANSI SQL | Base dialect; the foundation all others extend |
+| Athena | AWS Athena |
+| BigQuery | Google BigQuery |
+| ClickHouse | |
+| Databricks | Extends SparkSQL with Unity Catalog syntax |
+| Db2 | IBM Db2 |
+| Doris | Apache Doris |
+| DuckDB | |
+| Exasol | |
+| FlinkSQL | Apache Flink |
+| Greenplum | |
+| Hive | Apache Hive |
+| Impala | Apache Impala |
+| MariaDB | |
+| Materialize | |
+| MySQL | |
+| Oracle | |
+| PostgreSQL | aka Postgres |
+| Redshift | Amazon Redshift |
+| Snowflake | |
+| SOQL | Salesforce Object Query Language |
+| SparkSQL | Apache Spark |
+| SQLite | |
+| StarRocks | |
+| Teradata | |
+| Transact-SQL | aka T-SQL |
+| Trino | |
+| Vertica | |
+
+<Note>
+  Dialect support is community-driven. If a dialect is missing features you need, [raise an issue](https://github.com/sqlfluff/sqlfluff/issues) or open a pull request — contributions are especially welcome.
+</Note>
+
+## Templates supported
+
+SQL does not lend itself well to modularity, so it is commonly templated for reuse. SQLFluff supports linting templated SQL by substituting dummy values at lint time:
+
+- **Jinja2** (aka Jinja)
+- **SQL placeholders** (e.g. SQLAlchemy parameters)
+- **Python format strings**
+- **dbt** (requires the dbt templater plugin)
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Requirements, pip install, Docker, and pre-commit setup.
+  </Card>
+  <Card title="Quick Start" icon="play" href="/quickstart">
+    Lint and fix your first SQL file with a step-by-step walkthrough.
+  </Card>
+</CardGroup>

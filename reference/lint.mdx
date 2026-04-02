@@ -1,0 +1,251 @@
+---
+title: "sqlfluff lint"
+description: "Check SQL files for rule violations. Reports all violations without modifying files."
+---
+
+```bash
+sqlfluff lint [OPTIONS] [PATHS]...
+```
+
+`sqlfluff lint` checks one or more SQL files (or directories) against the configured rules and reports each violation with its file path, line number, column position, rule code, and description. Files are not modified.
+
+`PATHS` can be:
+- A path to a `.sql` file: `path/to/query.sql`
+- A directory of SQL files: `path/to/sql/`
+- `.` or a blank to lint the current working directory
+- `-` (a lone dash) to read from stdin
+
+## Examples
+
+```bash
+# Lint a single file
+sqlfluff lint query.sql --dialect ansi
+
+# Lint a directory recursively
+sqlfluff lint src/queries/ --dialect postgres
+
+# Lint the current directory using config from .sqlfluff
+sqlfluff lint .
+
+# Lint only specific rules
+sqlfluff lint query.sql --dialect ansi --rules LT01,LT02
+
+# Lint from stdin
+cat query.sql | sqlfluff lint --dialect ansi -
+
+# Output results as JSON
+sqlfluff lint query.sql --dialect ansi --format json
+
+# Use multiple parallel workers
+sqlfluff lint . --processes 4
+```
+
+## Options
+
+### Dialect and rules
+
+<ParamField path="--dialect" type="string">
+  The SQL dialect to use. Overrides `dialect` in `.sqlfluff`.
+
+  Run `sqlfluff dialects` for a full list of available dialects.
+</ParamField>
+
+<ParamField path="--rules" type="string">
+  Lint only the listed rules. Accepts a comma-separated list of rule codes or group names.
+
+  ```bash
+  sqlfluff lint --rules LT01,LT02 query.sql
+  sqlfluff lint --rules layout query.sql
+  ```
+</ParamField>
+
+<ParamField path="--exclude-rules" type="string">
+  Exclude specific rules from the active rule set. Accepts a comma-separated list of rule codes or group names.
+
+  ```bash
+  sqlfluff lint --exclude-rules LT01 query.sql
+  ```
+</ParamField>
+
+### Configuration
+
+<ParamField path="--config" type="path">
+  Path to an additional `.sqlfluff` config file (INI/CFG format). Loaded on top of the standard config discovery chain.
+</ParamField>
+
+<ParamField path="--ignore-local-config" type="boolean">
+  Skip config files found by the normal directory-tree discovery. Use with `--config` to apply only a single explicit config file.
+</ParamField>
+
+### Output format
+
+<ParamField path="--format" type="string" default="human">
+  Format for lint results. Choose one of:
+
+  | Value | Description |
+  |---|---|
+  | `human` | Human-readable output (default) |
+  | `json` | JSON array of violation records |
+  | `yaml` | YAML array of violation records |
+  | `github-annotation` | GitHub Actions annotation format (for [yuzutech/annotations-action](https://github.com/yuzutech/annotations-action)) |
+  | `github-annotation-native` | Native GitHub Actions workflow command format |
+  | `sarif` | SARIF 2.1.0 static analysis results format |
+  | `none` | Suppress all output (useful when only the exit code matters) |
+</ParamField>
+
+<ParamField path="--write-output" type="path">
+  Write lint results to a file instead of stdout. When this is set, normal stdout logging is re-enabled even for non-human formats.
+
+  ```bash
+  sqlfluff lint . --format json --write-output results.json
+  ```
+</ParamField>
+
+<ParamField path="--annotation-level" type="string" default="warning">
+  Applies when `--format` is `github-annotation` or `github-annotation-native`. Sets the default annotation level. Accepted values: `notice`, `warning`, `failure`, `error`. Rules configured as warnings always produce `notice`-level annotations regardless of this setting.
+</ParamField>
+
+### Behaviour
+
+<ParamField path="--nofail" type="boolean">
+  Always exit with code `0`, regardless of violations found. Useful during rollout when you want to report violations without breaking CI.
+</ParamField>
+
+<ParamField path="--disregard-sqlfluffignores" type="boolean">
+  Lint files even if they match patterns in `.sqlfluffignore`.
+</ParamField>
+
+<ParamField path="--disable-noqa" type="boolean">
+  Ignore all inline `-- noqa` comments. Violations that would normally be suppressed are reported.
+</ParamField>
+
+<ParamField path="--disable-noqa-except" type="string">
+  Ignore all inline `-- noqa` comments except those for the listed rule codes. Accepts a comma-separated list.
+</ParamField>
+
+<ParamField path="--warn-unused-ignores" type="boolean">
+  Emit a warning for `-- noqa` comments that do not match any violations. Helps keep suppression comments tidy.
+</ParamField>
+
+### Performance
+
+<ParamField path="--processes" type="integer">
+  Number of parallel worker processes. `0` uses all available CPUs. Negative values subtract from the available count (`-1` = all CPUs minus one).
+
+  ```bash
+  sqlfluff lint --processes 0 .
+  ```
+</ParamField>
+
+<ParamField path="--disable-progress-bar" type="boolean">
+  Hide the progress bar when linting large numbers of files.
+</ParamField>
+
+<ParamField path="--persist-timing" type="path">
+  Write per-file timing data to a CSV file for external analysis.
+
+  <Note>
+    This feature is in beta. The CSV format may change between releases without notice.
+  </Note>
+</ParamField>
+
+### Encoding and parsing
+
+<ParamField path="--encoding" type="string">
+  File encoding to use when reading SQL files. Defaults to autodetect.
+</ParamField>
+
+<ParamField path="--ignore" type="string">
+  Suppress entire families of errors. Accepts a comma-separated list such as `parsing,templating`. Matching errors are excluded from the output and do not influence the exit code.
+
+  ```bash
+  sqlfluff lint --ignore parsing query.sql
+  ```
+</ParamField>
+
+<ParamField path="--recursion-limit" type="integer">
+  Set the Python recursion limit before linting. Use this for very deeply nested SQL.
+</ParamField>
+
+<ParamField path="--stdin-filename" type="path">
+  When reading from stdin, treat the content as if it came from this file path. SQLFluff uses the path for config discovery and dialect detection.
+
+  ```bash
+  cat query.sql | sqlfluff lint --stdin-filename query.sql -
+  ```
+</ParamField>
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success — no violations found |
+| `1` | Lint violations found |
+| `2` | Parse error or templating error |
+
+<Tip>
+  Use `--nofail` to always return exit code `0`. This is useful when you want violations reported in CI output without failing the build.
+</Tip>
+
+## Output format examples
+
+<CodeGroup>
+
+```text human
+== [query.sql] FAIL
+L:   1 | P:   9 | LT01 | Expected single whitespace between naked identifier
+                        | and binary operator '+'. [layout.spacing]
+L:   2 | P:  10 | CP01 | Keywords must be consistently upper case.
+                        | [capitalisation.keywords]
+All Finished 📜 🎉!
+```
+
+```json json
+[
+  {
+    "filepath": "query.sql",
+    "violations": [
+      {
+        "code": "LT01",
+        "start_line_no": 1,
+        "start_line_pos": 9,
+        "description": "Expected single whitespace between naked identifier and binary operator '+'.",
+        "name": "layout.spacing",
+        "warning": false,
+        "fixes": [],
+        "start_file_pos": 8
+      }
+    ]
+  }
+]
+```
+
+```yaml yaml
+- filepath: query.sql
+  violations:
+  - code: LT01
+    start_line_no: 1
+    start_line_pos: 9
+    description: Expected single whitespace between naked identifier and binary operator
+      '+'.
+    name: layout.spacing
+    warning: false
+    fixes: []
+    start_file_pos: 8
+```
+
+</CodeGroup>
+
+## Reading from stdin
+
+Pass `-` as the path to read SQL from stdin. The `--stdin-filename` option lets SQLFluff use the correct config for the file's actual location.
+
+```bash
+cat query.sql | sqlfluff lint --dialect ansi -
+
+echo 'select col from tbl' | sqlfluff lint --dialect ansi -
+```
+
+<Note>
+  When reading from stdin, SQLFluff uses `stdin` as the filename in violation output unless you pass `--stdin-filename`.
+</Note>

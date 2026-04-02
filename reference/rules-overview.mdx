@@ -1,0 +1,170 @@
+---
+title: "Rules Overview"
+description: "How SQLFluff rules work, how they are named, and how to configure them."
+---
+
+SQLFluff ships with a large set of built-in rules organised into categories. Each rule checks one specific aspect of your SQL style or correctness.
+
+---
+
+## Rule naming convention
+
+Every rule has a code made up of two letters identifying its category, followed by two digits identifying the rule within that category. For example:
+
+- **AL01** — Aliasing, rule 1 (implicit table aliases)
+- **LT02** — Layout, rule 2 (indentation)
+- **CP01** — Capitalisation, rule 1 (keyword casing)
+
+Rules also have a `name` in dot-notation, such as `aliasing.table` or `layout.indent`. You can use either the code or the name in configuration and on the command line.
+
+---
+
+## Rule categories
+
+<CardGroup cols={2}>
+  <Card title="AL — Aliasing" icon="tag" href="/reference/rules-aliasing">
+    Rules about how tables and columns are aliased: explicit `AS` keyword, unique aliases, unused aliases, and alias length.
+  </Card>
+  <Card title="AM — Ambiguous" icon="circle-question">
+    Rules that flag ambiguous SQL constructs such as `SELECT *` or ambiguous column references in `GROUP BY`.
+  </Card>
+  <Card title="CP — Capitalisation" icon="font">
+    Rules enforcing consistent capitalisation of keywords, identifiers, functions, and literals.
+  </Card>
+  <Card title="CV — Convention" icon="square-check" href="/reference/rules-convention">
+    Rules about SQL coding conventions: not-equal operator style, `COALESCE` over `IFNULL`, trailing commas, `COUNT(*)`, null comparisons, semicolons, and more.
+  </Card>
+  <Card title="JJ — Jinja" icon="layer-group">
+    Rules specific to Jinja-templated SQL: spacing around Jinja tags and block structure.
+  </Card>
+  <Card title="LT — Layout" icon="table-columns" href="/reference/rules-layout">
+    Rules about whitespace, indentation, line length, operator placement, comma style, and file structure.
+  </Card>
+  <Card title="OR — Oracle" icon="database">
+    Rules specific to Oracle SQL syntax and conventions.
+  </Card>
+  <Card title="RF — References" icon="link">
+    Rules about column and table references: qualification, consistency, quoting of identifiers.
+  </Card>
+  <Card title="ST — Structure" icon="code-branch">
+    Rules about SQL structure: nested subqueries, `DISTINCT` usage, `UNION` vs `UNION ALL`, `JOIN` conditions.
+  </Card>
+  <Card title="TQ — T-SQL" icon="server">
+    Rules specific to Transact-SQL (Microsoft SQL Server / Azure SQL) conventions.
+  </Card>
+</CardGroup>
+
+---
+
+## Listing available rules
+
+Run the following command to see all rules available in your installed version of SQLFluff:
+
+```bash
+sqlfluff rules
+```
+
+The output lists each rule's code, name, and a short description.
+
+---
+
+## Enabling and disabling rules in config
+
+Rules are configured in a `.sqlfluff` file in your project root (INI format).
+
+### Enable only specific rules
+
+```ini
+[sqlfluff]
+rules = AL01, LT01, LT02, CP01
+```
+
+### Exclude specific rules
+
+```ini
+[sqlfluff]
+exclude_rules = AL07, CV08
+```
+
+### Use a rule group
+
+```ini
+[sqlfluff]
+rules = core
+```
+
+### Configure a specific rule
+
+Some rules accept per-rule configuration under their own section:
+
+```ini
+[sqlfluff:rules:AL01]
+aliasing = explicit
+
+[sqlfluff:rules:LT05]
+max_line_length = 120
+ignore_comment_lines = true
+
+[sqlfluff:rules:CV01]
+preferred_not_equal_style = c_style
+```
+
+---
+
+## Rule groups
+
+Rules belong to one or more named groups. You can specify a group name wherever a rule code is accepted.
+
+| Group | Description |
+|-------|-------------|
+| `all` | Every rule. This is the default. |
+| `core` | A curated subset of stable, broadly applicable rules that are a good starting point for teams. See below for criteria. |
+| `aliasing` | All aliasing rules (AL category). |
+| `layout` | All layout rules (LT category). |
+| `convention` | All convention rules (CV category). |
+
+### Core rules criteria
+
+A rule is designated `core` if it meets **all** of the following:
+
+- Is stable
+- Applies to most SQL dialects
+- Could detect a genuine syntax issue or widely agreed bad practice
+- Is not overly opinionated toward one team's style guide
+
+Using only `core` rules is a good way to introduce SQLFluff to a team gradually before configuring the full rule set.
+
+---
+
+## Disabling rules inline
+
+You can suppress specific rules for a line or block using `-- noqa` comments:
+
+```sql
+SELECT a, b, c,  -- noqa: LT01
+FROM foo;
+
+-- noqa: disable=AL07
+SELECT
+    COUNT(orders.customer_id),
+    customers.name
+FROM orders
+JOIN customers ON orders.id = customers.user_id;
+-- noqa: enable=AL07
+```
+
+---
+
+## Rule reference pages
+
+<CardGroup cols={2}>
+  <Card title="Aliasing Rules (AL)" icon="tag" href="/reference/rules-aliasing">
+    AL01 through AL09
+  </Card>
+  <Card title="Layout Rules (LT)" icon="table-columns" href="/reference/rules-layout">
+    LT01 through LT13
+  </Card>
+  <Card title="Convention Rules (CV)" icon="square-check" href="/reference/rules-convention">
+    CV01 through CV12
+  </Card>
+</CardGroup>

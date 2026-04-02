@@ -1,0 +1,213 @@
+---
+title: "sqlfluff format"
+description: "Apply a curated set of formatting rules to SQL files. A simpler, opinionated alternative to sqlfluff fix."
+---
+
+```bash
+sqlfluff format [OPTIONS] [PATHS]...
+```
+
+`sqlfluff format` is a formatting-focused variant of `sqlfluff fix`. It applies a fixed, curated subset of stable rules and rewrites SQL files in place. Unlike `fix`, you cannot pass `--rules` to change which rules run — the rule set is determined by the command itself.
+
+`PATHS` can be:
+- A path to a `.sql` file: `path/to/query.sql`
+- A directory of SQL files: `path/to/sql/`
+- `.` or a blank to format the current working directory
+- `-` (a lone dash) to read from stdin and write formatted SQL to stdout
+
+## Format vs fix
+
+`sqlfluff format` and `sqlfluff fix` both rewrite SQL files, but they differ in intent and scope:
+
+| | `sqlfluff format` | `sqlfluff fix` |
+|---|---|---|
+| **Rule set** | Fixed subset of formatting rules | All enabled rules with available fixes |
+| **`--rules` flag** | Not supported — errors if passed | Supported |
+| **Purpose** | Consistent style (layout, capitalisation) | Fix all linting violations |
+| **Stability** | Conservative — only well-understood rules | May include rule fixes that are more opinionated |
+| **`--FIX-EVEN-UNPARSABLE`** | Never applied | Available as an explicit opt-in |
+
+<Tip>
+  Use `sqlfluff format` when you want a fast, opinionated formatter similar to `black` for Python — no configuration of which rules run, just consistent SQL style. Use `sqlfluff fix` when you want full control over which violations are corrected.
+</Tip>
+
+## Rules applied by format
+
+`sqlfluff format` applies the following rule groups and individual rules:
+
+| Rule / Group | Description |
+|---|---|
+| `capitalisation` | All capitalisation rules (keyword case, function name case, etc.) |
+| `layout` | All layout rules (whitespace, indentation, line breaks, etc.) |
+| `ambiguous.union` | Consistent `UNION` vs `UNION ALL` usage |
+| `convention.not_equal` | Consistent `!=` vs `<>` |
+| `convention.coalesce` | Use `COALESCE` instead of `IFNULL`/`NVL` |
+| `convention.select_trailing_comma` | Consistent trailing comma placement |
+| `convention.is_null` | Use `IS NULL` instead of `= NULL` |
+| `jinja.padding` | Consistent whitespace inside Jinja delimiters |
+| `structure.distinct` | Consistent `DISTINCT` usage |
+
+Rule exclusions via `--exclude-rules` or your `.sqlfluff` config are still respected — you can opt out of specific rules from this set.
+
+<Note>
+  You cannot pass `--rules` to `sqlfluff format`. If you do, the command exits with an error. To apply a custom set of fix rules, use `sqlfluff fix --rules ...` instead.
+</Note>
+
+## Examples
+
+```bash
+# Format a single file
+sqlfluff format query.sql --dialect ansi
+
+# Format a directory recursively
+sqlfluff format src/queries/ --dialect postgres
+
+# Format the current working directory using .sqlfluff config
+sqlfluff format .
+
+# Exclude a specific rule from the format run
+sqlfluff format query.sql --dialect ansi --exclude-rules CP01
+
+# Format from stdin, output to stdout
+cat query.sql | sqlfluff format --dialect ansi -
+
+# Save a copy with a suffix instead of overwriting
+sqlfluff format query.sql --dialect ansi --fixed-suffix .formatted
+
+# Use multiple parallel workers
+sqlfluff format . --processes 4
+```
+
+## Options
+
+### Dialect and configuration
+
+<ParamField path="--dialect" type="string">
+  The SQL dialect to use. Overrides `dialect` in `.sqlfluff`.
+</ParamField>
+
+<ParamField path="--exclude-rules" type="string">
+  Exclude specific rules from the format run. Accepts a comma-separated list of rule codes or group names. This is the only rule-filtering option supported by `format`.
+
+  ```bash
+  sqlfluff format --exclude-rules CP01 query.sql
+  ```
+</ParamField>
+
+<ParamField path="--config" type="path">
+  Path to an additional `.sqlfluff` config file (INI/CFG format), loaded on top of the normal discovery chain.
+</ParamField>
+
+<ParamField path="--ignore-local-config" type="boolean">
+  Skip config files found by the normal directory-tree discovery.
+</ParamField>
+
+### Output
+
+<ParamField path="-x, --fixed-suffix" type="string">
+  Write formatted output to a new file with this suffix appended instead of overwriting the original.
+
+  ```bash
+  sqlfluff format query.sql --fixed-suffix .formatted
+  # produces query.sql.formatted
+  ```
+</ParamField>
+
+### Performance
+
+<ParamField path="--processes" type="integer">
+  Number of parallel worker processes. `0` uses all available CPUs. Negative values subtract from the available count (`-1` = all CPUs minus one).
+</ParamField>
+
+<ParamField path="--disable-progress-bar" type="boolean">
+  Hide the progress bar when formatting large numbers of files.
+</ParamField>
+
+<ParamField path="--disregard-sqlfluffignores" type="boolean">
+  Format files even if they match patterns in `.sqlfluffignore`.
+</ParamField>
+
+<ParamField path="--persist-timing" type="path">
+  Write per-file timing data to a CSV file for external analysis.
+
+  <Note>
+    This feature is in beta. The CSV format may change between releases without notice.
+  </Note>
+</ParamField>
+
+### Encoding and parsing
+
+<ParamField path="--encoding" type="string">
+  File encoding to use when reading and writing files. Defaults to autodetect.
+</ParamField>
+
+<ParamField path="--ignore" type="string">
+  Suppress entire families of errors (`parsing`, `templating`). Matching errors are excluded from output and do not block formatting.
+</ParamField>
+
+<ParamField path="--disable-noqa" type="boolean">
+  Ignore all inline `-- noqa` comments.
+</ParamField>
+
+<ParamField path="--disable-noqa-except" type="string">
+  Ignore all inline `-- noqa` comments except those for the listed rule codes.
+</ParamField>
+
+<ParamField path="--warn-unused-ignores" type="boolean">
+  Warn about `-- noqa` comments that do not match any violations.
+</ParamField>
+
+<ParamField path="--recursion-limit" type="integer">
+  Set the Python recursion limit before formatting. Useful for very deeply nested SQL.
+</ParamField>
+
+<ParamField path="--stdin-filename" type="path">
+  When reading from stdin, treat the content as if it came from this path, for config discovery purposes.
+</ParamField>
+
+## Before and after
+
+<CodeGroup>
+
+```sql before
+select a+b as foo,c as bar from my_table where id=1
+```
+
+```sql after
+SELECT
+    a + b AS foo,
+    c AS bar
+FROM my_table
+WHERE id = 1
+```
+
+</CodeGroup>
+
+Changes applied:
+- `SELECT`, `FROM`, `WHERE` are capitalised
+- Each select target is placed on its own indented line
+- Spaces are added around binary operators (`+`, `=`)
+- `AS` keyword is retained with correct spacing
+
+## Formatting from stdin
+
+Pass `-` as the path to read SQL from stdin and write formatted SQL to stdout. Any errors are written to stderr.
+
+```bash
+cat query.sql | sqlfluff format --dialect ansi -
+
+echo 'select 1+2' | sqlfluff format --dialect ansi -
+# Output: SELECT 1 + 2
+```
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | All fixable formatting violations were corrected |
+| `1` | Unfixable violations remain |
+| `2` | Parse error or templating error |
+
+<Note>
+  Unlike `sqlfluff fix`, `sqlfluff format` never applies `--FIX-EVEN-UNPARSABLE`. Files with parse errors are always skipped to protect against producing invalid SQL.
+</Note>

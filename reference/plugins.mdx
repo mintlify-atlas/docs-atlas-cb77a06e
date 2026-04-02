@@ -1,0 +1,277 @@
+---
+title: "Plugin system"
+description: "Extend SQLFluff with installable plugins that add custom rules, custom templaters, and default configuration."
+---
+
+SQLFluff's plugin system lets you distribute organisation-specific rules and templaters as ordinary Python packages. Plugins are discovered automatically at runtime — no changes to SQLFluff itself are required.
+
+## What plugins can do
+
+<CardGroup cols={2}>
+  <Card title="Custom rules" icon="list-check">
+    Define lint rules that enforce your own SQL conventions and register them alongside SQLFluff's built-in rules.
+  </Card>
+  <Card title="Custom templaters" icon="brackets-curly">
+    Add support for new templating engines by implementing the `RawTemplater` interface and exposing it through the plugin entry point.
+  </Card>
+  <Card title="Default configuration" icon="sliders">
+    Bundle a default `.cfg` file with your plugin so rule configuration is applied automatically when the plugin is installed.
+  </Card>
+  <Card title="Config validation" icon="shield-check">
+    Declare the config keys your rules accept so SQLFluff can validate them and surface descriptions in `sqlfluff rules`.
+  </Card>
+</CardGroup>
+
+## How plugins are discovered
+
+SQLFluff uses [pluggy](https://pluggy.readthedocs.io/en/latest/) — the same plugin system used by pytest — for plugin discovery. Pluggy reads Python packaging metadata at import time, so **a plugin must be installed as a Python package to be found**.
+
+When SQLFluff starts, it scans installed packages for an entry point in the `sqlfluff` group. Any package that declares one is loaded and its hook implementations are called.
+
+<Note>
+  Installation can be from PyPI, a local path, a private Git repository, or any other source that `pip install` supports. The plugin does not need to be publicly published to work.
+</Note>
+
+You can verify discovery by running:
+
+```bash
+sqlfluff rules
+```
+
+If your plugin's rules appear in the output, discovery succeeded.
+
+## Installing a plugin
+
+Plugins are installed with `pip` like any other Python package.
+
+<Tabs>
+  <Tab title="From PyPI">
+    ```bash
+    pip install sqlfluff-templater-dbt
+    ```
+  </Tab>
+  <Tab title="From a local path">
+    ```bash
+    pip install -e /path/to/your/plugin
+    ```
+  </Tab>
+  <Tab title="From a Git repository">
+    ```bash
+    pip install git+https://github.com/your-org/sqlfluff-plugin-example.git
+    ```
+  </Tab>
+</Tabs>
+
+After installation, run `sqlfluff rules` to confirm the plugin was picked up.
+
+<Tip>
+  If you change the entry point, filenames, or plugin location, re-run `pip install` to update the packaging metadata. Discovery relies on installed metadata, not the file system directly.
+</Tip>
+
+## Plugin directory structure
+
+The recommended layout for a rules plugin mirrors the official `sqlfluff-plugin-example`:
+
+```
+sqlfluff-plugin-example/
+├── pyproject.toml
+├── MANIFEST.in
+├── src/
+│   └── sqlfluff_plugin_example/
+│       ├── __init__.py
+│       ├── rules.py
+│       └── plugin_default_config.cfg
+└── test/
+    └── rules/
+        ├── rule_test_cases_test.py
+        └── test_cases/
+            └── Rule_Example_L001.yml
+```
+
+| File | Purpose |
+|---|---|
+| `pyproject.toml` | Package metadata and the `sqlfluff` entry point declaration |
+| `MANIFEST.in` | Ensures non-Python files (e.g. `.cfg`) are included in the distribution |
+| `__init__.py` | Hook implementations (`get_rules`, `load_default_config`, `get_configs_info`) |
+| `rules.py` | Rule class definitions |
+| `plugin_default_config.cfg` | Default INI-style config for your rules |
+| `test/` | pytest suite for your rules |
+
+## Declaring the entry point in pyproject.toml
+
+The entry point is what SQLFluff uses to find your plugin. Add a `[project.entry-points.sqlfluff]` section to your `pyproject.toml`:
+
+```toml pyproject.toml
+[build-system]
+requires = ["setuptools>=40.8.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sqlfluff-plugin-example"
+version = "1.0.0"
+requires-python = ">=3.9"
+dependencies = [
+    "sqlfluff>=3.1.0"
+]
+
+[project.entry-points.sqlfluff]
+# The key is an arbitrary name; the value is the importable module path.
+sqlfluff_example = "sqlfluff_plugin_example"
+```
+
+The key on the left (`sqlfluff_example`) is an arbitrary label. The value (`sqlfluff_plugin_example`) is the fully qualified Python module that SQLFluff will import. The module must contain functions decorated with `@hookimpl`.
+
+<Note>
+  If you prefer `setup.cfg` or `setup.py`, the Python packaging docs have equivalent examples for [entry points](https://setuptools.pypa.io/en/stable/userguide/entry_point.html).
+</Note>
+
+## Implementing hook functions
+
+Your plugin's root module (`__init__.py`) declares hook implementations using the `@hookimpl` decorator. Three hooks are available:
+
+<AccordionGroup>
+  <Accordion title="get_rules — register rule classes">
+    Return a list of `BaseRule` subclasses. Import the rule classes inside the function body, not at the module level, to avoid issues with SQLFluff's metaclass validation order.
+
+    ```python __init__.py
+    from sqlfluff.core.plugin import hookimpl
+    from sqlfluff.core.rules import BaseRule
+
+
+    @hookimpl
+    def get_rules() -> list[type[BaseRule]]:
+        """Get plugin rules."""
+        from sqlfluff_plugin_example.rules import Rule_Example_L001
+
+        return [Rule_Example_L001]
+    ```
+  </Accordion>
+
+  <Accordion title="load_default_config — bundle default configuration">
+    Return a dictionary of default configuration values loaded from a bundled `.cfg` file. This config is merged with SQLFluff's own defaults when the plugin is active.
+
+    ```python __init__.py
+    from typing import Any
+
+    from sqlfluff.core.config import load_config_resource
+    from sqlfluff.core.plugin import hookimpl
+
+
+    @hookimpl
+    def load_default_config() -> dict[str, Any]:
+        """Loads the default configuration for the plugin."""
+        return load_config_resource(
+            package="sqlfluff_plugin_example",
+            file_name="plugin_default_config.cfg",
+        )
+    ```
+
+    The `.cfg` file uses the same INI format as `.sqlfluff`:
+
+    ```ini plugin_default_config.cfg
+    [sqlfluff:rules:Example_L001]
+    forbidden_columns = bar, baaz
+    ```
+  </Accordion>
+
+  <Accordion title="get_configs_info — declare config keys">
+    Return a dictionary mapping config key names to their metadata. SQLFluff uses this for validation and for displaying descriptions in `sqlfluff rules`.
+
+    ```python __init__.py
+    from sqlfluff.core.plugin import hookimpl
+    from sqlfluff.core.rules import ConfigInfo
+
+
+    @hookimpl
+    def get_configs_info() -> dict[str, dict[str, ConfigInfo]]:
+        """Get rule config validations and descriptions."""
+        return {
+            "forbidden_columns": {"definition": "A list of columns to forbid"},
+        }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Distributing a plugin on PyPI
+
+Publishing a SQLFluff plugin to PyPI follows the standard Python packaging workflow.
+
+<Steps>
+  <Step title="Complete your pyproject.toml">
+    Fill in all required metadata fields: `name`, `version`, `description`, `authors`, `license`, and `requires-python`. Pin the minimum SQLFluff version your plugin requires.
+
+    ```toml pyproject.toml
+    [project]
+    name = "sqlfluff-plugin-myorg"
+    version = "1.0.0"
+    description = "SQLFluff rules for MyOrg SQL conventions"
+    authors = [{ name = "MyOrg", email = "eng@myorg.com" }]
+    license = { text = "MIT" }
+    requires-python = ">=3.9"
+    dependencies = ["sqlfluff>=3.1.0"]
+
+    [project.entry-points.sqlfluff]
+    sqlfluff_myorg = "sqlfluff_plugin_myorg"
+    ```
+  </Step>
+
+  <Step title="Include non-Python files">
+    If your plugin bundles a default config file, add a `MANIFEST.in` so it is included in the source distribution:
+
+    ```text MANIFEST.in
+    include src/sqlfluff_plugin_myorg/plugin_default_config.cfg
+    ```
+
+    Also add the `package_data` entry to `pyproject.toml` if using `setuptools`:
+
+    ```toml pyproject.toml
+    [tool.setuptools.package-data]
+    sqlfluff_plugin_myorg = ["*.cfg"]
+    ```
+  </Step>
+
+  <Step title="Build the distribution">
+    Install the build tool and create the distribution archives:
+
+    ```bash
+    pip install build
+    python -m build
+    ```
+
+    This creates `dist/sqlfluff-plugin-myorg-1.0.0.tar.gz` and `dist/sqlfluff_plugin_myorg-1.0.0-py3-none-any.whl`.
+  </Step>
+
+  <Step title="Upload to PyPI">
+    Use `twine` to upload:
+
+    ```bash
+    pip install twine
+    twine upload dist/*
+    ```
+
+    After upload, anyone can install your plugin with:
+
+    ```bash
+    pip install sqlfluff-plugin-myorg
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  Name your package with the `sqlfluff-plugin-` prefix (e.g. `sqlfluff-plugin-myorg`) so it is easy for users to find on PyPI. The dbt templater follows the pattern `sqlfluff-templater-dbt`.
+</Tip>
+
+## Troubleshooting discovery
+
+<Warning>
+  The most common cause of rules not appearing is that the plugin has not been installed, or has been installed into a different Python environment than the one running SQLFluff. Always confirm with `pip show <package-name>` that the package is present in the active environment.
+</Warning>
+
+If `sqlfluff rules` does not show your plugin's rules:
+
+1. Confirm the package is installed: `pip show sqlfluff-plugin-example`
+2. Confirm the entry point is declared: `pip show --verbose sqlfluff-plugin-example` (look for `entry_points`)
+3. Try reinstalling: `pip install -e /path/to/plugin`
+4. Check for import errors by running `python -c "import sqlfluff_plugin_example"`
+
+The fastest way to rule out entry-point issues is to start from the [sqlfluff-plugin-example](https://github.com/sqlfluff/sqlfluff/tree/main/plugins/sqlfluff-plugin-example), install it with `pip install -e`, verify it appears in `sqlfluff rules`, and then modify it to match your needs.

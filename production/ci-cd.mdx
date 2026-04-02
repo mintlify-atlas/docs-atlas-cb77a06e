@@ -1,0 +1,196 @@
+---
+title: "CI/CD Integration"
+description: "Run SQLFluff in CI/CD pipelines to enforce SQL style automatically on every build or pull request."
+---
+
+SQLFluff is designed to work both as a developer utility and as part of automated pipelines. Its exit codes, machine-readable output formats, and diff-quality integration make it straightforward to integrate with any CI system.
+
+## Exit codes
+
+SQLFluff returns a standard exit code that your CI system can use to pass or fail a build:
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Operation succeeded. No issues found. |
+| `1` | Operation succeeded. Issues were found (for example, a linting violation or a file that could not be parsed). |
+| `2` | Operation failed. An error prevented SQLFluff from completing — for example, a configuration problem or an internal error. |
+
+Most CI systems treat any non-zero exit code as a build failure, so `sqlfluff lint` will automatically fail a build when violations are found.
+
+## Running sqlfluff lint in CI
+
+The simplest integration is to run `sqlfluff lint` as a CI step:
+
+```bash
+sqlfluff lint path/to/sql --dialect ansi
+```
+
+If any violations are found, SQLFluff exits with code `1` and the CI step fails.
+
+### Parallel execution with `--processes`
+
+For large SQL codebases, use the `--processes` flag to lint files in parallel and reduce wall-clock time:
+
+```bash
+sqlfluff lint . --dialect ansi --processes 4
+```
+
+Set `--processes` to the number of CPU cores available in your CI runner. Use `-1` to automatically use all available cores:
+
+```bash
+sqlfluff lint . --dialect ansi --processes -1
+```
+
+<Tip>
+  Parallel linting provides the most benefit when linting a large number of independent files. For a single large file, it has no effect.
+</Tip>
+
+## Machine-readable output with `--format`
+
+By default, SQLFluff outputs human-readable text. For CI pipelines that parse results programmatically, use the `--format` flag:
+
+<Tabs>
+  <Tab title="JSON">
+    ```bash
+    sqlfluff lint . --dialect ansi --format json
+    ```
+
+    Produces a JSON array of violation objects, each with `filepath`, `violations` (line, position, code, description), and a `stats` summary.
+  </Tab>
+  <Tab title="YAML">
+    ```bash
+    sqlfluff lint . --dialect ansi --format yaml
+    ```
+
+    Produces the same structure as JSON output but in YAML format.
+  </Tab>
+  <Tab title="GitHub annotation (native)">
+    ```bash
+    sqlfluff lint . --dialect ansi --format github-annotation-native
+    ```
+
+    Emits [GitHub workflow commands](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message) that GitHub converts into pull request annotations.
+
+    <Warning>
+      GitHub currently limits this format to displaying only the first 10 annotations per workflow run. For pull requests with many violations, use `github-annotation` with the yuzutech annotations action instead.
+    </Warning>
+  </Tab>
+  <Tab title="GitHub annotation (yuzutech)">
+    ```bash
+    sqlfluff lint . --dialect ansi --format github-annotation
+    ```
+
+    Produces output compatible with the [yuzutech annotations-action](https://github.com/yuzutech/annotations-action), which uses the GitHub API to annotate SQL directly in pull requests. This approach is not subject to the 10-annotation limit.
+  </Tab>
+</Tabs>
+
+## Linting only changed lines with diff-quality
+
+For projects with large amounts of existing SQL, running SQLFluff across the entire codebase in CI can produce a flood of pre-existing violations that are unrelated to the current change. The `diff-quality` tool limits output to only the new or modified lines in a pull request.
+
+<Note>
+  Installing SQLFluff automatically installs `diff_cover`, which provides the `diff-quality` command. No additional installation step is required.
+</Note>
+
+### Running diff-quality
+
+In your CI build script:
+
+<Steps>
+  <Step title="Change to the git repository root">
+    `diff-quality` requires access to git metadata, so it must be run from the root of your git repository.
+
+    ```bash
+    cd /path/to/your/repo
+    ```
+  </Step>
+
+  <Step title="Run diff-quality with SQLFluff as the tool">
+    ```bash
+    diff-quality --violations sqlfluff
+    ```
+
+    Output looks like:
+
+    ```text
+    -------------
+    Diff Quality
+    Quality Report: sqlfluff
+    Diff: origin/master...HEAD, staged and unstaged changes
+    -------------
+    sql/audience_size_queries/constraints/_postcondition_check_gdpr_compliance.sql (0.0%):
+    sql/audience_size_queries/constraints/_postcondition_check_gdpr_compliance.sql:5: Unquoted Identifiers must be consistently upper case.
+    -------------
+    Total:   1 line
+    Violations: 1 line
+    % Quality: 0%
+    -------------
+    ```
+  </Step>
+</Steps>
+
+### Configuration tips for diff-quality
+
+<AccordionGroup>
+  <Accordion title="Run from the repository root">
+    `diff-quality` needs to be run from the root of your git repository so it can locate git metadata. SQLFluff works best when its `.sqlfluff` config file is also placed in that same root directory.
+  </Accordion>
+  <Accordion title="Using dbt templater with diff-quality">
+    If you use the dbt templater, either place your `dbt_project.yml` in the repository root or define the dbt project subfolder inside your `.sqlfluff` config. Invoke both `diff-quality` and `sqlfluff` from the repository root. Misaligned paths are the most common source of hard-to-debug failures in this setup.
+  </Accordion>
+  <Accordion title="Debugging file discovery issues">
+    To verify SQLFluff is picking up the right files and config, run it directly from the same path you invoke `diff-quality`:
+
+    ```bash
+    sqlfluff lint my/project/path
+    ```
+
+    `diff-quality` calls SQLFluff as if from that same working directory.
+  </Accordion>
+  <Accordion title="HTML reports and quality thresholds">
+    `diff-quality` supports generating HTML reports and failing the build when quality drops below a threshold. See the [diff_cover documentation](https://github.com/Bachmann1234/diff_cover) for options including `--html-report` and `--fail-under`.
+  </Accordion>
+</AccordionGroup>
+
+## Security considerations
+
+When running SQLFluff in a CI environment where users can edit the SQL files being linted, keep the following in mind:
+
+**Templating and macro execution.** During the [templating step](/templating/overview) — in particular with Jinja or dbt — certain macros may execute arbitrary SQL (for example, the dbt `run_query` macro). SQLFluff uses the [Jinja2 SandboxedEnvironment](https://jinja.palletsprojects.com/en/3.0.x/sandbox/#jinja2.sandbox.SandboxedEnvironment) to limit unsafe execution.
+
+**Library path.** By default, SQLFluff allows users to bring arbitrary Python methods into the Jinja templating environment via the `library_path` configuration value. In secure CI environments, disable this by passing `--library-path none` on the command line:
+
+```bash
+sqlfluff lint my_path --library-path none
+```
+
+Or disable it via the Python API:
+
+```python
+from sqlfluff.core import FluffConfig, Linter
+
+config = FluffConfig(
+    overrides={
+        "dialect": "ansi",
+        # Use the string "none" to override any config file value.
+        "library_path": "none",
+    }
+)
+
+linted = Linter(config=config).lint_string(sql)
+```
+
+**In-file configuration.** Users who can edit SQL files can also influence SQLFluff's configuration via inline `-- noqa` directives. There is no meaningful additional protection from restricting access to `.sqlfluff` config files for users who already have edit access to the SQL files being linted.
+
+For a full list of known security advisories, see the [SQLFluff security advisories page](https://github.com/sqlfluff/sqlfluff/security/advisories).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Pre-commit hooks" icon="git-alt" href="/production/pre-commit">
+    Enforce SQL style before every commit using the pre-commit framework.
+  </Card>
+  <Card title="GitHub Actions" icon="github" href="/production/github-actions">
+    Annotate pull requests with lint violations using GitHub Actions.
+  </Card>
+</CardGroup>

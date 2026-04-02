@@ -1,97 +1,72 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "SQLFluff — The SQL Linter for Humans"
+description: "A dialect-flexible SQL linter and auto-formatter with support for 25+ SQL dialects, Jinja/dbt templating, and a powerful rule engine."
 ---
 
-## Setting up
+SQLFluff is a modular SQL linter and auto-formatter designed for data engineers, analytics engineers, and anyone who writes SQL. It enforces consistent style and catches errors across 25+ SQL dialects — including BigQuery, Snowflake, PostgreSQL, T-SQL, and dbt.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Install SQLFluff and lint your first SQL file in under two minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="CLI Reference" icon="terminal" href="/reference/cli">
+    Explore every command: lint, fix, parse, format, and more.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Configuration" icon="sliders" href="/configuration/overview">
+    Customize rules, dialects, and formatting to match your team's style.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Python API" icon="code" href="/reference/api-overview">
+    Integrate SQLFluff directly into your Python scripts and pipelines.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What SQLFluff does
 
-Everything you need to create world-class documentation.
+SQLFluff parses your SQL into a segment tree, runs configurable rules against it, and can automatically fix most violations. It works seamlessly in local development, CI/CD pipelines, and pre-commit hooks.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+<Steps>
+  <Step title="Install SQLFluff">
+    Install via pip — no additional dependencies required for most dialects.
+    ```bash
+    pip install sqlfluff
+    ```
+  </Step>
+  <Step title="Lint your SQL">
+    Point SQLFluff at a file or directory to see violations with line numbers and rule codes.
+    ```bash
+    sqlfluff lint query.sql --dialect postgres
+    ```
+  </Step>
+  <Step title="Auto-fix violations">
+    Let SQLFluff rewrite your SQL to comply with the configured rules.
+    ```bash
+    sqlfluff fix query.sql --dialect postgres
+    ```
+  </Step>
+  <Step title="Add to CI/CD">
+    Drop SQLFluff into your pre-commit config or GitHub Actions workflow to enforce standards automatically on every commit.
+  </Step>
+</Steps>
 
-## Need inspiration?
+## Key features
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={2}>
+  <Card title="25+ SQL Dialects" icon="database" href="/dialects/supported">
+    ANSI, BigQuery, Snowflake, PostgreSQL, T-SQL, Redshift, DuckDB, dbt, and many more.
+  </Card>
+  <Card title="Auto-fix" icon="wand-magic-sparkles" href="/reference/fix">
+    Automatically correct most linting violations without manual editing.
+  </Card>
+  <Card title="Templating support" icon="brackets-curly" href="/templating/overview">
+    Full support for Jinja2 templates, dbt models, and SQL placeholders.
+  </Card>
+  <Card title="Configurable rules" icon="list-check" href="/reference/rules-overview">
+    Enable, disable, and tune individual rules per dialect or per file path.
+  </Card>
+  <Card title="Pre-commit and CI" icon="shield-check" href="/production/pre-commit">
+    Integrates with pre-commit hooks, GitHub Actions, and diff-quality.
+  </Card>
+  <Card title="Plugin system" icon="puzzle-piece" href="/reference/plugins">
+    Extend SQLFluff with custom rules and templaters using the plugin API.
+  </Card>
+</CardGroup>

@@ -1,0 +1,90 @@
+---
+title: "Templating Overview"
+description: "How SQLFluff handles templated SQL and the supported templating engines."
+---
+
+SQL files often use templating to enable modularity and reuse — injecting variables, abstracting table names, conditionally including clauses, or calling macros. SQLFluff is designed to work alongside these templating systems rather than require plain SQL.
+
+## How SQLFluff processes templated SQL
+
+SQLFluff handles templated files through a three-step sliced file approach:
+
+<Steps>
+  <Step title="Pre-render">
+    SQLFluff renders the templated SQL using the configured templater, substituting variables and expanding macros to produce valid SQL.
+  </Step>
+  <Step title="Lint and fix">
+    SQLFluff applies lint and fix operations to the rendered SQL output.
+  </Step>
+  <Step title="Backport violations">
+    Rule violations found in the rendered SQL are mapped back to their original positions in the templated source file.
+  </Step>
+</Steps>
+
+<Note>
+  SQLFluff does not automatically have access to the same environment used in production template setup. You must either provide that environment or supply dummy values so the templater can render valid SQL. See each templater's documentation for details.
+</Note>
+
+## Setting the templater
+
+Set the templater in your `.sqlfluff` config file:
+
+```cfg .sqlfluff
+[sqlfluff]
+templater = jinja
+```
+
+The default templater is `jinja`.
+
+## Supported templaters
+
+<CardGroup cols={2}>
+  <Card title="Jinja" icon="code" href="/templating/jinja">
+    Uses Jinja2 to render templates. Supports variables, macros, filters, loops, and conditionals. The default and most commonly used templater.
+  </Card>
+  <Card title="dbt" icon="database" href="/templating/dbt">
+    Integrates directly with a dbt project to compile models using dbt's own Jinja environment. Available as a separate plugin. Recommended for dbt projects in CI/CD contexts.
+  </Card>
+  <Card title="Python" icon="brackets-curly">
+    Uses native Python f-string formatting. Variables are supplied via config. Suitable for simple placeholder substitution with Python-style `{variable}` syntax.
+  </Card>
+  <Card title="Placeholder" icon="sliders">
+    Replaces parameter placeholders from SQL libraries such as SQLAlchemy or Psycopg. Supports many common styles including `:name`, `%(name)s`, `$name`, `?`, and more.
+  </Card>
+</CardGroup>
+
+## Generic variable templating
+
+Variables are available across all templaters. By convention, template context values are set in the `[sqlfluff:templater:<name>:context]` section of the config file.
+
+For example, given this SQL file:
+
+```sql
+SELECT {{ num_things }} FROM {{ tbl_name }} WHERE id > 10 LIMIT 5
+```
+
+And this config:
+
+```cfg .sqlfluff
+[sqlfluff:templater:jinja:context]
+num_things=456
+tbl_name=my_table
+```
+
+SQLFluff will render the file as:
+
+```sql
+SELECT 456 FROM my_table WHERE id > 10 LIMIT 5
+```
+
+If a variable is present in the template but missing from the config context, SQLFluff raises a `SQLTemplatingError`. This appears as a violation without a line number, naming the missing variable.
+
+## Templating and parse errors
+
+<Warning>
+  Templaters may not be able to generate rendered SQL that covers the entire raw file.
+
+  For example, a `{% if condition %}` block will only render either the `then` or the `else` branch — not both. SQLFluff can only lint the rendered output, so branches not selected by the templater will never be checked by lint rules.
+
+  This is a known limitation that is planned for future improvement.
+</Warning>

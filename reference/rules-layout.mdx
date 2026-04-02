@@ -1,0 +1,475 @@
+---
+title: "Layout Rules (LT)"
+description: "Rules LT01–LT13 govern whitespace, indentation, line length, and file structure."
+---
+
+Layout rules enforce consistent formatting of SQL: spacing around operators and keywords, indentation depth, line length, comma placement, and file-level structure. Most layout rules are auto-fixable.
+
+---
+
+## LT01 — `layout.spacing`
+
+**Inappropriate spacing.**
+
+Checks for and fixes spacing issues across the entire file, including excessive whitespace, trailing whitespace at end of lines, wrong spacing between elements, and spacing around `USING`. This is a `core` rule.
+
+Configure spacing behaviour using the `[sqlfluff:layout:type:*]` sections rather than rule-level config.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        a,        b(c) as d  
+    FROM foo    
+    JOIN bar USING(a)
+    ```
+
+    Multiple spaces between columns, trailing whitespace, no space after `USING`.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        a, b(c) as d
+    FROM foo
+    JOIN bar USING (a)
+    ```
+
+    Single spaces, no trailing whitespace, space after `USING`.
+  </Tab>
+</Tabs>
+
+<Note>
+LT01 consolidates many legacy rules: L001 (trailing whitespace), L005/L008 (spaces around commas), L006 (spaces around operators), L023 (space after AS in WITH), L024 (space after USING), L039 (unnecessary whitespace), L048 (spacing around quoted literals), and L071 (spacing around brackets).
+</Note>
+
+---
+
+## LT02 — `layout.indent`
+
+**Incorrect indentation.**
+
+Checks that indentation is consistent and uses the configured unit (spaces or tabs) and size. By default expects multiples of four spaces. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+      	a,
+         b
+    FROM foo
+    ```
+
+    Mixed tabs and spaces; inconsistent indent depths.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        a,
+        b
+    FROM foo
+    ```
+
+    Consistent four-space indentation.
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff]
+# "space" (default) or "tab"
+indent_unit = space
+# Number of spaces per indent level (default 4)
+tab_space_size = 4
+```
+
+---
+
+## LT03 — `layout.operators`
+
+**Operators should follow a standard for being before/after newlines.**
+
+Checks that binary and comparison operators are consistently placed at the beginning (leading, default) or end (trailing) of lines when split across lines.
+
+<Tabs>
+  <Tab title="Anti-pattern (leading mode, default)">
+    ```sql
+    SELECT
+        a +
+        b
+    FROM foo
+    ```
+
+    With `line_position = leading`, the `+` should be at the start of the next line.
+  </Tab>
+  <Tab title="Best practice (leading mode)">
+    ```sql
+    SELECT
+        a
+        + b
+    FROM foo
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:layout:type:binary_operator]
+# "leading" (default) or "trailing"
+line_position = leading
+
+[sqlfluff:layout:type:comparison_operator]
+line_position = leading
+```
+
+---
+
+## LT04 — `layout.commas`
+
+**Leading/trailing comma enforcement.**
+
+Checks that commas are consistently placed at the end (trailing, default) or beginning (leading) of lines when a list is split across multiple lines.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        a
+        , b,
+        c
+    FROM foo
+    ```
+
+    Mixed leading and trailing commas.
+  </Tab>
+  <Tab title="Best practice (trailing, default)">
+    ```sql
+    SELECT
+        a,
+        b,
+        c
+    FROM foo
+    ```
+  </Tab>
+  <Tab title="Best practice (leading)">
+    ```sql
+    SELECT
+        a
+        , b
+        , c
+    FROM foo
+    ```
+
+    Set `line_position = leading` to enforce this style.
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:layout:type:comma]
+# "trailing" (default) or "leading"
+line_position = trailing
+```
+
+---
+
+## LT05 — `layout.long_lines`
+
+**Line is too long.**
+
+Flags lines that exceed the configured maximum line length. SQLFluff will attempt to auto-fix by breaking long lines. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT id, first_name, last_name, email, phone_number, address, city, state, postal_code FROM users WHERE active = 1
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        id,
+        first_name,
+        last_name,
+        email,
+        phone_number
+    FROM users
+    WHERE active = 1
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff]
+# Maximum line length (default 80)
+max_line_length = 80
+
+[sqlfluff:rules:LT05]
+# Don't flag lines that consist only of a comment
+ignore_comment_lines = false
+# Don't flag lines where the length is due to an inline comment clause
+ignore_comment_clauses = false
+```
+
+---
+
+## LT06 — `layout.functions`
+
+**Function name not immediately followed by parenthesis.**
+
+Flags any whitespace between a function name and its opening parenthesis. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        sum (a)
+    FROM foo
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        sum(a)
+    FROM foo
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## LT07 — `layout.cte_bracket`
+
+**WITH clause closing bracket should be on a new line.**
+
+Flags CTE definitions where the closing bracket is on the same line as the last line of the CTE body. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    WITH zoo AS (
+        SELECT a FROM foo)
+
+    SELECT * FROM zoo
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    WITH zoo AS (
+        SELECT a FROM foo
+    )
+
+    SELECT * FROM zoo
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## LT08 — `layout.cte_newline`
+
+**Blank line expected but not found after CTE closing bracket.**
+
+In queries with many CTEs, a blank line between each CTE and the next improves readability. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    WITH plop AS (
+        SELECT * FROM foo
+    )
+    SELECT a FROM plop
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    WITH plop AS (
+        SELECT * FROM foo
+    )
+
+    SELECT a FROM plop
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## LT09 — `layout.select_targets`
+
+**Select targets should be on a new line unless there is only one select target.**
+
+When a `SELECT` has multiple targets, each should be on its own line. A single target should remain on the same line as `SELECT`.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    -- Multiple targets on one line
+    SELECT a, b
+    FROM foo;
+
+    -- Single target on its own line
+    SELECT
+        a
+    FROM foo;
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    -- Multiple targets: each on its own line
+    SELECT
+        a,
+        b
+    FROM foo;
+
+    -- Single target: on the same line as SELECT
+    SELECT a
+    FROM foo;
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+```ini
+[sqlfluff:rules:LT09]
+# Whether SELECT * counts as a single target or multiple
+# Options: "single" (default) or "multiple"
+wildcard_policy = single
+```
+
+---
+
+## LT10 — `layout.select_modifiers`
+
+**SELECT modifiers (e.g. DISTINCT) must be on the same line as SELECT.**
+
+This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        DISTINCT a,
+        b
+    FROM x
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT DISTINCT
+        a,
+        b
+    FROM x
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## LT11 — `layout.set_operators`
+
+**Set operators should be surrounded by newlines.**
+
+`UNION`, `UNION ALL`, `INTERSECT`, and `EXCEPT` operators should appear on their own line, with newlines before and after. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT 'a' AS col UNION ALL
+    SELECT 'b' AS col
+    ```
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT 'a' AS col
+    UNION ALL
+    SELECT 'b' AS col
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## LT12 — `layout.end_of_file`
+
+**Files must end with a single trailing newline.**
+
+Ensures the file ends with exactly one newline character. This is a `core` rule.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+    SELECT
+        a
+    FROM foo
+    ```
+
+    No trailing newline at end of file.
+
+    ```sql
+    SELECT
+        a
+    FROM foo
+
+
+    ```
+
+    Multiple trailing newlines.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        a
+    FROM foo
+    ```
+
+    Exactly one trailing newline at end of file.
+  </Tab>
+</Tabs>
+
+---
+
+## LT13 — `layout.start_of_file`
+
+**Files must not begin with newlines or whitespace.**
+
+The first character in the file must be a non-whitespace character (code or comment). Leading blank lines and indentation before the first keyword are not allowed.
+
+<Tabs>
+  <Tab title="Anti-pattern">
+    ```sql
+
+    SELECT
+        a
+    FROM foo
+    ```
+
+    File starts with a blank line.
+
+    ```sql
+        SELECT
+        a
+    FROM foo
+    ```
+
+    File starts with indentation.
+  </Tab>
+  <Tab title="Best practice">
+    ```sql
+    SELECT
+        a
+    FROM foo
+    ```
+
+    ```sql
+    -- A leading comment is also fine
+    SELECT
+        a
+    FROM foo
+    ```
+  </Tab>
+</Tabs>

@@ -1,80 +1,197 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick Start"
+description: "Lint and auto-fix your first SQL file with SQLFluff in under five minutes."
 ---
 
-## Get started in three steps
+This guide walks you through installing SQLFluff, linting a SQL file, fixing violations automatically, and configuring SQLFluff for your project.
 
-Get your documentation site running locally and make your first customization.
+<Steps>
+  <Step title="Install SQLFluff">
+    Install SQLFluff using pip. Python 3.9 or later is required.
 
-### Step 1: Set up your local environment
+    ```bash
+    pip install sqlfluff
+    ```
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    Verify the installation:
 
-### Step 2: Deploy your changes
+    ```bash
+    sqlfluff --version
+    ```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```text
+    sqlfluff, version 4.1.0
+    ```
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Create a SQL file to lint">
+    Create a file called `test.sql` with the following content — it has several intentional style violations:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```sql
+    SELECT a+b  AS foo,
+    c AS bar from my_table
+    ```
 
-### Step 3: Go live
+    This SQL is valid but poorly formatted: missing spaces around the `+` operator, inconsistent indentation, and a lowercase `from` keyword.
+  </Step>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+  <Step title="Lint the file">
+    Run `sqlfluff lint` against the file, specifying the dialect:
+
+    ```bash
+    sqlfluff lint test.sql --dialect ansi
+    ```
+
+    SQLFluff reports each violation with the line number, position, rule code, and a plain-English description:
+
+    ```text
+    == [test.sql] FAIL
+    L:   1 | P:   1 | LT09 | Select targets should be on a new line unless there is
+                           | only one select target.
+                           | [layout.select_targets]
+    L:   1 | P:   1 | ST06 | Select wildcards then simple targets before calculations
+                           | and aggregates. [structure.column_order]
+    L:   1 | P:   7 | LT02 | Expected line break and indent of 4 spaces before 'a'.
+                           | [layout.indent]
+    L:   1 | P:   9 | LT01 | Expected single whitespace between naked identifier and
+                           | binary operator '+'. [layout.spacing]
+    L:   1 | P:  10 | LT01 | Expected single whitespace between binary operator '+'
+                           | and naked identifier. [layout.spacing]
+    L:   1 | P:  11 | LT01 | Expected only single space before 'AS' keyword. Found '
+                           | '. [layout.spacing]
+    L:   2 | P:   1 | LT02 | Expected indent of 4 spaces.
+                           | [layout.indent]
+    L:   2 | P:   9 | LT02 | Expected line break and no indent before 'from'.
+                           | [layout.indent]
+    L:   2 | P:  10 | CP01 | Keywords must be consistently upper case.
+                           | [capitalisation.keywords]
+    All Finished 📜 🎉!
+    ```
+
+    Each line shows `L: <line> | P: <position> | <rule_code> | <description>`. For example, `LT01` at line 1, position 9 means there is no space around the `+` operator.
+  </Step>
+
+  <Step title="Fix violations automatically">
+    Use `sqlfluff fix` to automatically rewrite the file. You can fix all fixable violations at once:
+
+    ```bash
+    sqlfluff fix test.sql --dialect ansi
+    ```
+
+    ```text
+    ==== finding fixable violations ====
+    == [test.sql] FAIL
+    L:   1 | P:   1 | ST06 | Select wildcards then simple targets before calculations
+                           | and aggregates. [structure.column_order]
+    L:   1 | P:   7 | LT02 | Expected line break and indent of 4 spaces before 'a'.
+                           | [layout.indent]
+    ...
+    == [test.sql] FIXED
+    4 fixable linting violations found
+    ```
+
+    After fixing, `test.sql` is rewritten to:
+
+    ```sql
+    SELECT
+        c AS bar,
+        a + b AS foo
+    FROM my_table
+    ```
+
+    The columns are indented, the `FROM` keyword is capitalised, and spacing around operators is corrected.
+
+    <Tip>
+      To fix only specific rules, pass `--rules` with a comma-separated list: `sqlfluff fix test.sql --rules LT02,CP01 --dialect ansi`
+    </Tip>
+  </Step>
+
+  <Step title="Create a .sqlfluff config file">
+    Instead of passing `--dialect` on every command, create a `.sqlfluff` configuration file in your project root. This file also lets you customise indentation size, capitalisation policy, and any other rule settings.
+
+    ```ini
+    [sqlfluff]
+    dialect = ansi
+
+    [sqlfluff:indentation]
+    tab_space_size = 2
+
+    [sqlfluff:rules:capitalisation.keywords]
+    capitalisation_policy = lower
+    ```
+
+    With this config in place, SQLFluff picks up the dialect and your rule overrides automatically. Running fix now produces lowercase keywords and two-space indentation:
+
+    ```sql
+    select
+      c as bar,
+      a + b as foo
+    from my_table
+    ```
+
+    <Note>
+      The `.sqlfluff` file is discovered by walking up the directory tree from the file being linted, so you can place it at the root of your repository and it will apply to all SQL files inside it.
+    </Note>
+  </Step>
+
+  <Step title="Lint a directory">
+    You are not limited to linting single files. Pass a directory path to lint every `.sql` file it contains:
+
+    ```bash
+    sqlfluff lint path/to/my/sqlfiles
+    ```
+
+    To lint the current directory recursively:
+
+    ```bash
+    sqlfluff lint .
+    ```
+
+    SQLFluff traverses subdirectories automatically and reports violations grouped by file.
+  </Step>
+</Steps>
+
+## Before and after
+
+The table below summarises the transformation that `sqlfluff fix` applies to the example SQL:
+
+<CodeGroup>
+
+```sql Before
+SELECT a+b  AS foo,
+c AS bar from my_table
+```
+
+```sql After
+SELECT
+    c AS bar,
+    a + b AS foo
+FROM my_table
+```
+
+</CodeGroup>
+
+Key changes made by the fixer:
+
+- Each select target is placed on its own line and indented four spaces.
+- Spaces are added around the `+` binary operator.
+- Extra whitespace before `AS` is removed.
+- The `from` keyword is capitalised to `FROM`.
+- Column order is normalised (simple targets before expressions).
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Installation" icon="download" href="/installation">
+    Docker, pre-commit, and VS Code extension setup.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration/overview">
+    Full reference for the .sqlfluff config file and all available settings.
+  </Card>
+  <Card title="Rules reference" icon="list-check" href="/reference/rules-overview">
+    Browse all available rules with descriptions and examples.
+  </Card>
+  <Card title="In production" icon="shield-check" href="/production/ci-cd">
+    Run SQLFluff in CI/CD pipelines and pre-commit hooks.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

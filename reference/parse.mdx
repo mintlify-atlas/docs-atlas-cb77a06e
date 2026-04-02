@@ -1,0 +1,243 @@
+---
+title: "sqlfluff parse"
+description: "Parse a SQL file and output the parse tree. Useful for debugging grammar issues and understanding how SQLFluff interprets your SQL."
+---
+
+```bash
+sqlfluff parse [OPTIONS] PATH
+```
+
+`sqlfluff parse` parses a single SQL file (or stdin) and outputs the resulting parse tree. It does not run linting rules. Use it to understand how SQLFluff tokenises and structures your SQL, and to diagnose grammar or dialect issues.
+
+`PATH` can be:
+- A path to a `.sql` file: `path/to/query.sql`
+- A directory path (all SQL files within are parsed)
+- `-` (a lone dash) to read from stdin
+
+## When to use parse
+
+`sqlfluff parse` is most useful when:
+
+- SQLFluff reports a `PRS` (parse error) violation on a file and you want to see exactly where the parse fails.
+- You are developing a custom dialect or grammar and need to verify that your SQL is parsed correctly.
+- You want to inspect the parse tree to understand which segments a rule will visit.
+- You are debugging a rule that behaves unexpectedly on a particular SQL construct.
+
+## Examples
+
+```bash
+# Parse a file and print the human-readable tree
+sqlfluff parse query.sql --dialect ansi
+
+# Parse and output only code segments (no whitespace or meta segments)
+sqlfluff parse query.sql --dialect ansi --code-only
+
+# Parse and output as JSON
+sqlfluff parse query.sql --dialect ansi --format json
+
+# Parse and output as YAML
+sqlfluff parse query.sql --dialect ansi --format yaml
+
+# Include meta segments and position information in JSON output
+sqlfluff parse query.sql --dialect ansi --format json --include-meta
+
+# Parse from stdin
+echo 'SELECT 1' | sqlfluff parse --dialect ansi -
+
+# Run benchmarking output alongside the parse
+sqlfluff parse query.sql --dialect ansi --bench
+```
+
+## Options
+
+### Dialect and configuration
+
+<ParamField path="--dialect" type="string">
+  The SQL dialect to use. Overrides `dialect` in `.sqlfluff`.
+
+  Run `sqlfluff dialects` to see all available dialects.
+</ParamField>
+
+<ParamField path="--config" type="path">
+  Path to an additional `.sqlfluff` config file (INI/CFG format), loaded on top of the normal discovery chain.
+</ParamField>
+
+<ParamField path="--ignore-local-config" type="boolean">
+  Skip config files found by directory-tree discovery.
+</ParamField>
+
+### Output format
+
+<ParamField path="-f, --format" type="string" default="human">
+  Format for parse results. Choose one of:
+
+  | Value | Description |
+  |---|---|
+  | `human` | Indented tree with type and raw value labels (default) |
+  | `json` | JSON object with a `segments` tree |
+  | `yaml` | YAML object with a `segments` tree |
+  | `none` | Suppress all output |
+</ParamField>
+
+<ParamField path="-c, --code-only" type="boolean">
+  Output only code segments, omitting whitespace, newlines, and meta segments (indents and dedents). Produces a more compact view.
+</ParamField>
+
+<ParamField path="-m, --include-meta" type="boolean">
+  Include meta segments (indents, dedents, and placeholders) in the output. When used with `--format json` or `--format yaml`, this also adds six position fields to each segment: `start_line_no`, `start_line_pos`, `start_file_pos`, `end_line_no`, `end_line_pos`, and `end_file_pos`.
+</ParamField>
+
+<ParamField path="--write-output" type="path">
+  Write parse output to a file instead of stdout. When set, normal stdout logging is re-enabled even for non-human formats.
+
+  ```bash
+  sqlfluff parse query.sql --format json --write-output tree.json
+  ```
+</ParamField>
+
+<ParamField path="--nofail" type="boolean">
+  Always exit with code `0`, even if parse errors are found.
+</ParamField>
+
+### Diagnostics
+
+<ParamField path="--bench" type="boolean">
+  Print benchmark timing information after parsing completes.
+</ParamField>
+
+<ParamField path="--parse-statistics" type="boolean">
+  Enable detailed debug output showing how terminators are used during parsing. This is a low-level diagnostic tool.
+</ParamField>
+
+<ParamField path="--recursion-limit" type="integer">
+  Set the Python recursion limit before parsing. Useful for very deeply nested SQL.
+</ParamField>
+
+### Other
+
+<ParamField path="--encoding" type="string">
+  File encoding to use when reading files. Defaults to autodetect.
+</ParamField>
+
+<ParamField path="--ignore" type="string">
+  Suppress families of errors (`parsing`, `templating`) from the output.
+</ParamField>
+
+<ParamField path="--disable-noqa" type="boolean">
+  Ignore all inline `-- noqa` comments.
+</ParamField>
+
+<ParamField path="--stdin-filename" type="path">
+  When reading from stdin, treat the content as if it came from this path, for config discovery purposes.
+</ParamField>
+
+## Understanding the parse tree
+
+The parse tree is a hierarchical representation of your SQL. Each node has a **type** (the segment kind) and either **child segments** or a **raw value**.
+
+### Example SQL
+
+```sql
+SELECT 1 + 2 AS result
+```
+
+### Human-readable tree output
+
+```text
+[L:  1, P:  1]  file:
+    [L:  1, P:  1]      statement:
+        [L:  1, P:  1]          select_statement:
+            [L:  1, P:  1]              select_clause:
+                [L:  1, P:  1]                  keyword:                  'SELECT'
+                [L:  1, P:  7]                  whitespace:               ' '
+                [L:  1, P:  8]                  select_clause_element:
+                    [L:  1, P:  8]                      expression:
+                        [L:  1, P:  8]                          literal:                  '1'
+                        [L:  1, P:  9]                          whitespace:               ' '
+                        [L:  1, P: 10]                          arithmetic_operator:      '+'
+                        [L:  1, P: 11]                          whitespace:               ' '
+                        [L:  1, P: 12]                          literal:                  '2'
+                    [L:  1, P: 13]                      whitespace:               ' '
+                    [L:  1, P: 14]                      alias_expression:
+                        [L:  1, P: 14]                          keyword:                  'AS'
+                        [L:  1, P: 16]                          whitespace:               ' '
+                        [L:  1, P: 17]                          naked_identifier:         'result'
+    [L:  1, P: 23]      newline:                  '\n'
+```
+
+Each line shows `[L: <line>, P: <position>]`, the segment type, and its raw content (for leaf segments).
+
+### JSON tree output
+
+```json
+[
+  {
+    "filepath": "query.sql",
+    "segments": {
+      "statement": [
+        {
+          "select_statement": [
+            {
+              "select_clause": [
+                { "keyword": "SELECT" },
+                { "whitespace": " " },
+                {
+                  "select_clause_element": [
+                    {
+                      "expression": [
+                        { "literal": "1" },
+                        { "whitespace": " " },
+                        { "arithmetic_operator": "+" },
+                        { "whitespace": " " },
+                        { "literal": "2" }
+                      ]
+                    },
+                    { "whitespace": " " },
+                    {
+                      "alias_expression": [
+                        { "keyword": "AS" },
+                        { "whitespace": " " },
+                        { "naked_identifier": "result" }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]
+```
+
+### Parse errors in the tree
+
+When SQLFluff cannot parse a section of SQL, it emits a `unparsable` segment containing the raw text that failed to parse:
+
+```text
+[L:  1, P:  1]  file:
+    [L:  1, P:  1]      statement:
+        [L:  1, P:  1]          unparsable:          !! Expected: 'SelectStatementSegment'
+            [L:  1, P:  1]              raw:            'SELEC'
+```
+
+This is the primary signal that a grammar issue exists. Common causes include:
+
+- A dialect-specific construct not supported by the selected dialect
+- A typo or syntax error in the SQL
+- A templated variable that was not resolved before parsing
+
+<Tip>
+  If you see an `unparsable` segment, try switching the dialect with `--dialect` to see if the SQL parses correctly under a different grammar. If it does, the construct may be dialect-specific and the wrong dialect was selected.
+</Tip>
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Parse completed with no violations |
+| `1` | Parse violations found |
+
+Use `--nofail` to always return `0`.
